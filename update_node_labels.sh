@@ -12,22 +12,22 @@ SERVICES=(
 
 # 🔥 Print current labels BEFORE making changes
 echo "🔍 Current Node Labels:"
-docker node inspect $(docker node ls -q) --format '{{ .ID }}: {{ json .Spec.Labels }}'
+docker --host $DOCKER_HOST node inspect $(docker --host $DOCKER_HOST node ls -q) --format '{{ .ID }}: {{ json .Spec.Labels }}'
 
 
 echo "🔄 Updating Swarm node labels for tracked services..."
 
 # Step 1: Remove old labels from all nodes
-docker node ls --format '{{.ID}}' | while read -r node; do
+docker --host $DOCKER_HOST node ls --format '{{.ID}}' | while read -r node; do
     for label in "${!SERVICES[@]}"; do
-        docker node update --label-rm "$label" "$node" 2>/dev/null
+        docker --host $DOCKER_HOST node update --label-rm "$label" "$node" 2>/dev/null
     done
 done
 
 # Step 2: Apply correct labels to nodes where services are running
 for label in "${!SERVICES[@]}"; do
     SERVICE_NAME="${SERVICES[$label]}"
-    SERVICE_NODE=$(docker service ps "$SERVICE_NAME" --format '{{.Node}}' | head -n 1)
+    SERVICE_NODE=$(docker --host $DOCKER_HOST service ps "$SERVICE_NAME" --format '{{.Node}}' | head -n 1)
 
     if [ -z "$SERVICE_NODE" ]; then
         echo "❌ $SERVICE_NAME is not running. No label applied."
@@ -35,7 +35,7 @@ for label in "${!SERVICES[@]}"; do
     fi
 
     echo "✅ $SERVICE_NAME is running on node: $SERVICE_NODE. Applying label '$label=true'."
-    docker node update --label-add "$label=true" "$SERVICE_NODE"
+    docker --host $DOCKER_HOST node update --label-add "$label=true" "$SERVICE_NODE"
 done
 
 echo "✅ All labels updated successfully!"

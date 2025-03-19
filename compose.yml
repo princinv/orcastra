@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  docker-socket-proxy:
+    image: ghcr.io/linuxserver/docker-socket-proxy:latest
+    environment:
+      - LOG_LEVEL=info         # Optional: Reduce logging verbosity
+      - AUTH=1                 # Enable authentication (optional, but recommended)
+      - MODE=rw                # Set mode to 'rw' (read/write for label updates)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - swarm_network
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - "node.role == manager"  # Only needed on Swarm manager nodes
+
+  swarm-orchestration:
+    image: ghcr.io/princinv/swarm-orchestration:latest
+    environment:
+      DOCKER_HOST: "tcp://docker-socket-proxy:2375"
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - "node.labels.homelab == true"
+        preferences:
+          - spread: node.memory.available
+          - spread: node.cpu.available
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+      update_config:
+        parallelism: 1
+        delay: 5s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+      max_replicas_per_node: 1
+    networks:
+      - swarm_network
+
+networks:
+  swarm_network:
+    driver: overlay
