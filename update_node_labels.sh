@@ -1,13 +1,19 @@
-#!/bin/sh
+#!/bin/bash
 
 # Define services and their respective labels
+STACK_NAME="swarm-dev" 
+
 declare -A SERVICES
 SERVICES=(
-    ["database"]="db_service"
-    ["cache"]="redis_service"
-    ["queue"]="rabbitmq_service"
-    ["app"]="app_service"
+    ["semaphore_db"]="${STACK_NAME}_semaphore_db"
+    ["gitea_db"]="${STACK_NAME}_gitea_db"
+    ["komodo_db"]="${STACK_NAME}_komodo_db"
 )
+
+# 🔥 Print current labels BEFORE making changes
+echo "🔍 Current Node Labels:"
+docker node inspect $(docker node ls -q) --format '{{ .ID }}: {{ json .Spec.Labels }}'
+
 
 echo "🔄 Updating Swarm node labels for tracked services..."
 
