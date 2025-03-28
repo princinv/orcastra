@@ -1,0 +1,31 @@
+leader: hl-core-ubuntu
+advertise_addr: 192.168.69.119
+
+nodes:
+  hl-node03-proxmox:
+    ip: 192.168.69.116
+    labels: [ homelab, proxmox, tdarr ]
+  hl-node02-proxmox:
+    ip: 192.168.69.117
+    labels: [ homelab, proxmox, tdarr ]
+  hl-core-proxmox:
+    ip: 192.168.69.118
+    labels: [ homelab, proxmox, tdarr ]
+  hl-core-ubuntu:
+    ip: 192.168.69.119
+    labels: [ homelab, ubuntu, tdarr ]
+  hl-node02-ubuntu:
+    ip: 192.168.69.120
+    labels: [ homelab, ubuntu, tdarr ]
+  hl-node03-ubuntu:
+    ip: 192.168.69.121
+    labels: [ homelab, ubuntu, tdarr ]
+  rworkstation:
+    ip: 192.168.69.150
+    labels: [ tdarr-wide ]
+  rthinkpad:
+    ip: 192.168.69.151
+    labels: [ tdarr-wide ]
+
+options:
+  prune_unknown_labels: false

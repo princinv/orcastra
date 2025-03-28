@@ -1,0 +1,27 @@
+# semaphore_db:
+#   restart_dependents: true
+#   retry_intervals: [ 2, 10, 60, 300, 900 ]
+#   services:
+#   - semaphore
+
+# gitea_db:
+#   retry_intervals: [ 2, 10, 60, 300, 900 ]
+#   restart_dependents: true
+#   services:
+#   - gitea
+#   - gitea_redis
+
+# komodo_db:
+#   retry_intervals: [ 2, 10, 60, 300, 900 ]
+#   restart_dependents: true
+#   services:
+#   - komodo_core
+#   - komodo_periphery
+
+couchdb:
+  retry_intervals: [ 2, 10, 60, 300, 900 ]
+  restart_dependents: true
+  services:
+  - influxdbv1
+  - swarmpit
+  - swarmpit-agent

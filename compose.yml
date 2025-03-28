@@ -1,50 +1,78 @@
-version: '3.8'
-
 services:
-  docker-socket-proxy:
-    image: ghcr.io/linuxserver/docker-socket-proxy:latest
-    environment:
-      - LOG_LEVEL=info         # Optional: Reduce logging verbosity
-      - AUTH=1                 # Enable authentication (optional, but recommended)
-      - MODE=rw                # Set mode to 'rw' (read/write for label updates)
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - swarm_network
-    deploy:
-      mode: global
-      placement:
-        constraints:
-          - "node.role == manager"  # Only needed on Swarm manager nodes
-
   swarm-orchestration:
     image: ghcr.io/princinv/swarm-orchestration:latest
+    container_name: swarm-orch
+    command: ["/app/entrypoint.sh"]
     environment:
-      DOCKER_HOST: "tcp://docker-socket-proxy:2375"
-    deploy:
-      mode: replicated
-      replicas: 1
-      placement:
-        constraints:
-          - "node.labels.homelab == true"
-        preferences:
-          - spread: node.memory.available
-          - spread: node.cpu.available
-      restart_policy:
-        condition: any
-        delay: 10s
-        max_attempts: 5
-      update_config:
-        parallelism: 1
-        delay: 5s
-        failure_action: rollback
-      rollback_config:
-        parallelism: 1
-        delay: 5s
-      max_replicas_per_node: 1
+      BOOTSTRAP_MODE: "watch"  # loop, once, or watch
+      LOOP_INTERVAL: "300"  # default 300
+      PRUNE_UNKNOWN_LABELS: "false"  # default false
+      RELABEL_TIME: "60"
+      EVENT_MODE: "true"
+      POLLING_MODE: "false"
+      RESTART_DEPENDENTS: "true"
+      REBALANCE_MONITOR_INTERVAL_SECONDS: "30"
+      REBALANCE_GLOBAL_COOLDOWN_MINUTES: "10"
+      REBALANCE_GLOBAL_MEM_THRESHOLD_PERCENT: "85"
+      COMMAND_FILE: "/mnt/commands/swarm-orchestration.command.yml"  # default /mnt/commands/swarm-orchestration.command.yml
+      NODES_FILE: "/etc/swarm/nodes.yml"  # default /etc/swarm/nodes.yml
+      DEPENDENCIES_FILE: "/config/dependencies.yml"  # default /config/dependencies.yml
+      LOG_TO_FILE: "true"  # default "false"
+      # DRY_RUN: "true"  # default "false"
+      # RUN_ONCE: "true"  # default "false"
+      DEBUG: "true"  # default "false"
+      # DOCKER_HOST: "tcp://docker-socket-proxy:2375"
+    volumes:
+      - ./config:/etc/swarm-orchestration
+      - ./logs:/var/log/swarm-orchestration
+      - ./commands/swarm-orch.command.yml:/tmp/swarm-orchestration.command.yml
+      - ~/.ssh/swarm-orch_ed25519:/root/.ssh/swarm-orch_id_ed25519:ro
+      - ~/.ssh/known_hosts:/root/.ssh/known_hosts:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    # deploy:
+    #   mode: replicated
+    #   replicas: 1
+    #   placement:
+    #     constraints:
+    #       - "node.labels.homelab == true"
+    #       - "node.labels.node_name == hl-core-ubuntu" 
+    #     preferences:
+    #       - spread: node.memory.available
+    #       - spread: node.cpu.available
+    #     max_replicas_per_node: 1
+    #   update_config:
+    #     parallelism: 1
+    #     delay: 5s
+    #     failure_action: rollback
+    #   rollback_config:
+    #     parallelism: 1
+    #     delay: 5s
+    #   restart_policy:
+    #     condition: any
+    #     delay: 10s
+    #     max_attempts: 5
     networks:
-      - swarm_network
+      - orch-net
+
+  # pve-exporter:
+  #   # command: ["--log-level=DEBUG"]
+  #   image: prompve/prometheus-pve-exporter:latest
+  #   container_name: pve-exporter
+  #   environment:
+  #     - PVE_USER=exporter@pve
+  #     - PVE_TOKEN_NAME=pve-exporter-token
+  #     - PVE_TOKEN_VALUE=b59c9267-871a-432b-9d5c-2ee317a56a06
+  #     - PVE_VERIFY_SSL=false
+  #   ports:
+  #     - "9221:9221"
+  #   volumes:
+  #     - ./pve-exporter/pve.yml:/etc/prometheus/pve.yml:ro
+  #   networks:
+  #     - orch-net
+  #   restart: unless-stopped
 
 networks:
-  swarm_network:
+  orch-net:
     driver: overlay
+    external: true
+    attachable: true
