@@ -1,0 +1,55 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+env/
+.venv/
+*.log
+
+# === VSCode / PyCharm ===
+.vscode/
+.idea/
+
+# === Docker ===
+*.tar
+*.img
+*.bak
+docker-compose.override.yml
+.env
+.env.*
+
+# === Secrets ===
+*.pem
+*.key
+*.crt
+*.enc
+*.secrets
+*.bak
+
+# === Swarm-Orch state ===
+logs/
+*.log
+var/
+tmp/
+.cache/
+
+# === Node Exporter / Prometheus temp files ===
+*.prom
+.prometheus/
+
+# === YAML overrides ===
+config/*.override.yml
+commands/*.override.yml
+
+# === Misc ===
+*.swp
+*.swo
+.DS_Store
+.archive/

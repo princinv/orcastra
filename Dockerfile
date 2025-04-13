@@ -1,11 +1,11 @@
 FROM python:3.12-slim
 
 # Set working directory
-WORKDIR /app
+WORKDIR /src
 
 # --- Environment Variables ---
 # Ensure Python can locate all modular packages
-ENV PYTHONPATH="/app:/app/core:/app/lib"
+ENV PYTHONPATH="/src:/src/core:/src/lib"
 
 # --- Install OS dependencies ---
 RUN apt-get update && \
@@ -20,10 +20,11 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 RUN mkdir -p /etc/swarm-orchestration /var/lib/swarm-orchestration /var/log/swarm-orchestration
 
 # --- Copy project structure ---
-COPY app/ /app/
-COPY core/ /app/core/
-COPY lib/ /app/lib/
+COPY src/ /src/
+COPY core/ /src/core/
+COPY lib/ /src/lib/
 COPY config/ /etc/swarm-orchestration/
+COPY scripts/ /usr/local/bin/
 
 # --- Default entrypoint ---
 CMD ["python", "-m", "app.supervisor"]

@@ -9,7 +9,10 @@ Launches:
 """
 
 import threading
-from app import bootstrap_swarm, label_sync, rebalance
+import bootstrap_swarm
+import label_sync
+import rebalance
+
 
 def run_label_sync():
     label_sync.run()
