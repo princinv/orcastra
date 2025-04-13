@@ -1,0 +1,4 @@
+- relabel_all
+- bootstrap_swarm
+- update_dependents
+- remove_all_labels
