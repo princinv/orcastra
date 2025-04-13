@@ -1,17 +1,25 @@
 """
 node_labels.py
-- Encapsulates logic for discovering which node is running a service and labeling accordingly.
+- Determines which node a given service is running on.
+- Also includes logic for labeling nodes that run anchor services.
 """
 
-import time
+from core.docker_client import client
+from lib.labels import apply_label
+from lib.docker_helpers import get_service_node
 
-def get_service_node(service, wait_timeout=5):
-    deadline = time.time() + wait_timeout
-    while time.time() < deadline:
-        tasks = service.tasks()
-        for task in tasks:
-            status = task.get("Status", {})
-            if status.get("State") == "running":
-                return task.get("NodeID")
-        time.sleep(1)
-    return None
+
+def label_anchors(anchor_list, stack_name, dry_run=False, debug=False):
+    """
+    Applies a label like gitea_db=true to the node currently running that service.
+    """
+    for anchor in anchor_list:
+        service_name = f"{stack_name}_{anchor}"
+        node_id = get_service_node(service_name, debug=debug)
+        if not node_id or node_id == "starting":
+            if debug:
+                print(f"[label_anchors] {service_name} is not ready.")
+            continue
+        apply_label(client, node_id, anchor, dry_run=dry_run)
+        if debug:
+            print(f"[label_anchors] Applied {anchor}=true to node {node_id}")
