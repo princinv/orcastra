@@ -1,4 +1,4 @@
-# app/supervisor.py
+# src/supervisor.py
 
 """
 Entry point for the swarm-orch container.

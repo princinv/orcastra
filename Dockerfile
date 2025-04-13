@@ -27,4 +27,4 @@ COPY config/ /etc/swarm-orchestration/
 COPY scripts/ /usr/local/bin/
 
 # --- Default entrypoint ---
-CMD ["python", "-m", "app.supervisor"]
+CMD ["python", "-m", "supervisor"]
