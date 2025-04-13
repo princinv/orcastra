@@ -1,23 +1,29 @@
 FROM python:3.12-slim
 
+# Set working directory
 WORKDIR /app
 
-# --- Install dependencies ---
+# --- Environment Variables ---
+# Ensure Python can locate all modular packages
+ENV PYTHONPATH="/app:/app/core:/app/lib"
+
+# --- Install OS dependencies ---
 RUN apt-get update && \
     apt-get install -y iputils-ping openssh-client && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir docker pyyaml requests
+# --- Install Python dependencies ---
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# --- Create needed dirs ---
+# --- Create runtime dirs ---
 RUN mkdir -p /etc/swarm-orchestration /var/lib/swarm-orchestration /var/log/swarm-orchestration
 
 # --- Copy project structure ---
 COPY app/ /app/
-COPY utils/ /app/utils/
+COPY core/ /app/core/
+COPY lib/ /app/lib/
 COPY config/ /etc/swarm-orchestration/
-COPY commands/ /app/commands/
 
-
-# --- Default CMD (override with docker-compose or ENV) ---
-CMD ["python", "/app/label_dependencies.py"]
+# --- Default entrypoint ---
+CMD ["python", "/app/supervisor.py"]
