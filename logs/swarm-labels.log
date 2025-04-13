@@ -19505,3 +19505,21 @@
 [2025-03-28 13:06:56] ❌ swarm-dev_swarmpit-agent is not running. Retrying update.
 [2025-03-28 13:06:56] http://localhost:None "GET /v1.48/services/swarm-dev_swarmpit-agent HTTP/1.1" 404 57
 [2025-03-28 13:06:56] ❌ Failed to update service 'swarm-dev_swarmpit-agent': 404 Client Error for http+docker://localhost/v1.48/services/swarm-dev_swarmpit-agent: Not Found ("service swarm-dev_swarmpit-agent not found")
+[2025-03-28 16:16:30] 🚨 Triggered by swarm-dev_couchdb, running reconciliation
+[2025-03-28 16:16:33] 🚀 Starting dependency reconciliation run...
+[2025-03-28 16:16:33] 📄 Loaded dependencies: {'couchdb': {'retry_intervals': [2, 10, 60, 300, 900], 'restart_dependents': True, 'services': ['influxdbv1', 'swarmpit', 'swarmpit-agent']}}
+[2025-03-28 16:16:33] http://localhost:None "GET /v1.48/services HTTP/1.1" 200 None
+[2025-03-28 16:16:33] 📦 Running services: ['swarm-media_tdarr-node04', 'swarm-media_tdarr-node05', 'swarm-media_tdarr-node02', 'ai-stack_ollama', 'swarm-media_tdarr-node03']
+[2025-03-28 16:16:33] http://localhost:None "GET /v1.48/nodes HTTP/1.1" 200 None
+[2025-03-28 16:16:33] http://localhost:None "GET /v1.48/nodes/6h4aikon8p4681kwyxui5zwmk HTTP/1.1" 200 None
+[2025-03-28 16:16:33] http://localhost:None "GET /v1.48/nodes/jcxuss02hbuv38d3afouqjbwi HTTP/1.1" 200 1996
+[2025-03-28 16:16:33] http://localhost:None "GET /v1.48/nodes/n2u9u5n4d3f2ctyctjay2yynh HTTP/1.1" 200 2019
+[2025-03-28 16:16:33] http://localhost:None "POST /v1.48/nodes/n2u9u5n4d3f2ctyctjay2yynh/update?version=224634 HTTP/1.1" 200 0
+[2025-03-28 16:16:33] 🗑️ Removed label 'couchdb' from node n2u9u5n4d3f2ctyctjay2yynh
+[2025-03-28 16:16:33] http://localhost:None "GET /v1.48/nodes/oz6450budgyxh1yufkpuj80tw HTTP/1.1" 200 1824
+[2025-03-28 16:16:33] http://localhost:None "GET /v1.48/services/swarm-dev_couchdb HTTP/1.1" 404 50
+[2025-03-28 16:16:33] ⚠️ Could not inspect service: swarm-dev_couchdb — 404 Client Error for http+docker://localhost/v1.48/services/swarm-dev_couchdb: Not Found ("service swarm-dev_couchdb not found")
+[2025-03-28 16:16:33] ❌ swarm-dev_couchdb is not running. Skipping.
+[2025-03-28 16:16:33] http://localhost:None "GET /v1.48/services/swarm-dev_couchdb HTTP/1.1" 404 50
+[2025-03-28 16:16:33] ⚠️ Could not inspect service: swarm-dev_couchdb — 404 Client Error for http+docker://localhost/v1.48/services/swarm-dev_couchdb: Not Found ("service swarm-dev_couchdb not found")
+[2025-03-28 16:16:33] ❌ Could not find anchor node for swarm-dev_couchdb. Skipping.

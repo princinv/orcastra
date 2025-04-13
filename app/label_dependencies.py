@@ -70,14 +70,13 @@ def get_running_services():
         return []
 
 # Get node ID where a service is running
-# Get node ID where a service is running
 def get_service_node(service_name, wait_timeout=5):
     try:
         service = client.services.get(service_name)
         deadline = time.time() + wait_timeout
 
         while time.time() < deadline:
-            tasks = service.tasks()
+            tasks = service.tasks(filters={"desired-state": "running"})
 
             for task in tasks:
                 status = task.get("Status", {})

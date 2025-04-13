@@ -1,0 +1,1 @@
+../../scripts/stack-deploy.sh

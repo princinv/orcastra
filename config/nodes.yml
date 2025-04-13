@@ -4,22 +4,22 @@ advertise_addr: 192.168.69.119
 nodes:
   hl-node03-proxmox:
     ip: 192.168.69.116
-    labels: [ homelab, proxmox, tdarr ]
+    labels: [ homelab, proxmox, zfs, tdarr ]
   hl-node02-proxmox:
     ip: 192.168.69.117
-    labels: [ homelab, proxmox, tdarr ]
+    labels: [ homelab, proxmox, zfs, tdarr ]
   hl-core-proxmox:
     ip: 192.168.69.118
-    labels: [ homelab, proxmox, tdarr ]
+    labels: [ homelab, proxmox, zfs, tdarr ]
   hl-core-ubuntu:
     ip: 192.168.69.119
-    labels: [ homelab, ubuntu, tdarr ]
+    labels: [ homelab, ubuntu, ext4 ]
   hl-node02-ubuntu:
     ip: 192.168.69.120
-    labels: [ homelab, ubuntu, tdarr ]
+    labels: [ homelab, ubuntu, ext4 ]
   hl-node03-ubuntu:
     ip: 192.168.69.121
-    labels: [ homelab, ubuntu, tdarr ]
+    labels: [ homelab, ubuntu, ext4 ]
   rworkstation:
     ip: 192.168.69.150
     labels: [ tdarr-wide ]

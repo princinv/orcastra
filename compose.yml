@@ -23,12 +23,12 @@ services:
       DEBUG: "true"  # default "false"
       # DOCKER_HOST: "tcp://docker-socket-proxy:2375"
     volumes:
-      - ./config:/etc/swarm-orchestration
-      - ./logs:/var/log/swarm-orchestration
-      - ./commands/swarm-orch.command.yml:/tmp/swarm-orchestration.command.yml
+      - ${SWD}/swarm-dev/swarm-orch/config:/etc/swarm-orchestration
+      - ${SWD}/swarm-dev/swarm-orch/logs:/var/log/swarm-orchestration
+      - ${SWD}/swarm-dev/swarm-orch/commands/swarm-orch.command.yml:/tmp/swarm-orchestration.command.yml
       - ~/.ssh/swarm-orch_ed25519:/root/.ssh/swarm-orch_id_ed25519:ro
       - ~/.ssh/known_hosts:/root/.ssh/known_hosts:ro
-      - /var/run/docker.sock:/var/run/docker.sock
+      # - /var/run/docker.sock:/var/run/docker.sock
     # deploy:
     #   mode: replicated
     #   replicas: 1
