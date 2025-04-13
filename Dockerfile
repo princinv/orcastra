@@ -26,4 +26,4 @@ COPY lib/ /app/lib/
 COPY config/ /etc/swarm-orchestration/
 
 # --- Default entrypoint ---
-CMD ["python", "/app/supervisor.py"]
+CMD ["sh", "-c", "exec python /app/supervisor.py"]
