@@ -29,10 +29,10 @@ POLLING_MODE = os.getenv("POLLING_MODE", "true").lower() == "true"
 EVENT_MODE = os.getenv("EVENT_MODE", "false").lower() == "true"
 RESTART_DEPENDENTS = os.getenv("RESTART_DEPENDENTS", "false").lower() == "true"
 DEFAULT_RETRY_INTERVALS = [2, 10, 60, 300, 900]
-MAX_MISMATCH_DURATION = int(os.getenv("MAX_MISMATCH_DURATION", "600"))
+MAX_MISMATCH_DURATION = int(os.getenv("MAX_MISMATCH_DURATION", "600"))  # seconds
 
 should_run = True
-mismatch_timestamps = {}
+mismatch_timestamps = {}  # Track how long a service has been mismatched
 
 # --- Config-Driven Overrides ---
 def retry_intervals_for(anchor_label, dependencies):
@@ -47,6 +47,12 @@ def should_restart(anchor_label, dependencies):
         return value.get("restart_dependents", RESTART_DEPENDENTS)
     return RESTART_DEPENDENTS
 
+# --- Task State Handling Logic ---
+IGNORED_STATES = {"new", "allocated", "pending"}
+WAITING_STATES = {"assigned", "accepted", "preparing", "ready", "starting"}
+FINISHED_STATES = {"complete", "shutdown"}
+FAILURE_STATES = {"failed", "rejected", "remove", "orphaned"}
+
 # --- Dependent Coordination Logic ---
 def update_dependents(client, dependencies):
     logging.info("[label_sync] Updating dependents for colocated anchors")
@@ -56,13 +62,14 @@ def update_dependents(client, dependencies):
         dependents = config.get("services") if isinstance(config, dict) else config
         db_service = f"{STACK_NAME}_{anchor_label}"
 
+        # Cache anchor node
         db_node = service_node_map.get(db_service)
         if db_node is None:
             db_node = get_service_node(db_service, debug=True)
             service_node_map[db_service] = db_node
 
         if not db_node or db_node == "starting":
-            logging.warning(f"[label_sync] Anchor {db_service} is not ready or starting. Skipping.")
+            logging.warning(f"[label_sync] Anchor {db_service} is not running. Skipping.")
             log_task_status(db_service, context="anchor")
             continue
 
@@ -70,6 +77,7 @@ def update_dependents(client, dependencies):
             full_dep_service = f"{STACK_NAME}_{dep}"
             retry_schedule = retry_intervals_for(anchor_label, dependencies)
 
+            # Cache dependent node
             dep_node = service_node_map.get(full_dep_service)
             if dep_node is None:
                 dep_node = get_service_node(full_dep_service, debug=True)
@@ -78,12 +86,12 @@ def update_dependents(client, dependencies):
             now = datetime.utcnow()
 
             try:
-                # --- Still initializing or pending scheduling ---
+                # --- Still initializing ---
                 if dep_node == "starting":
                     logging.info(f"⏳ {full_dep_service} is still initializing or pending scheduling. Skipping update.")
                     continue
 
-                # --- No running task ---
+                # --- No task (fully failed or unschedulable) ---
                 if not dep_node:
                     if should_retry(full_dep_service, retry_schedule):
                         logging.warning(f"❌ {full_dep_service} not running. Retrying.")
@@ -93,7 +101,7 @@ def update_dependents(client, dependencies):
                         logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
                     continue
 
-                # --- Wrong node ---
+                # --- Node mismatch ---
                 if db_node != dep_node:
                     first_mismatch = mismatch_timestamps.get(full_dep_service, now)
                     mismatch_timestamps[full_dep_service] = first_mismatch
@@ -112,7 +120,7 @@ def update_dependents(client, dependencies):
                         logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
                     continue
 
-                # --- Already co-located ---
+                # --- Match: on correct node ---
                 logging.info(f"✅ {full_dep_service} already co-located with {anchor_label}")
                 clear_retry(full_dep_service)
                 mismatch_timestamps.pop(full_dep_service, None)
