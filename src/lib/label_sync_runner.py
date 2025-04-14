@@ -29,10 +29,10 @@ POLLING_MODE = os.getenv("POLLING_MODE", "true").lower() == "true"
 EVENT_MODE = os.getenv("EVENT_MODE", "false").lower() == "true"
 RESTART_DEPENDENTS = os.getenv("RESTART_DEPENDENTS", "false").lower() == "true"
 DEFAULT_RETRY_INTERVALS = [2, 10, 60, 300, 900]
-MAX_MISMATCH_DURATION = int(os.getenv("MAX_MISMATCH_DURATION", "600"))  # seconds
+MAX_MISMATCH_DURATION = int(os.getenv("MAX_MISMATCH_DURATION", "600"))
 
 should_run = True
-mismatch_timestamps = {}  # Track how long a service has been mismatched
+mismatch_timestamps = {}
 
 # --- Config-Driven Overrides ---
 def retry_intervals_for(anchor_label, dependencies):
@@ -56,14 +56,13 @@ def update_dependents(client, dependencies):
         dependents = config.get("services") if isinstance(config, dict) else config
         db_service = f"{STACK_NAME}_{anchor_label}"
 
-        # Cache anchor node
         db_node = service_node_map.get(db_service)
         if db_node is None:
             db_node = get_service_node(db_service, debug=True)
             service_node_map[db_service] = db_node
 
-        if not db_node:
-            logging.warning(f"[label_sync] Anchor {db_service} is not running. Skipping.")
+        if not db_node or db_node == "starting":
+            logging.warning(f"[label_sync] Anchor {db_service} is not ready or starting. Skipping.")
             log_task_status(db_service, context="anchor")
             continue
 
@@ -71,7 +70,6 @@ def update_dependents(client, dependencies):
             full_dep_service = f"{STACK_NAME}_{dep}"
             retry_schedule = retry_intervals_for(anchor_label, dependencies)
 
-            # Cache dependent node
             dep_node = service_node_map.get(full_dep_service)
             if dep_node is None:
                 dep_node = get_service_node(full_dep_service, debug=True)
