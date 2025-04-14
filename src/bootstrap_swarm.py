@@ -6,7 +6,7 @@ import os, signal, threading, time, yaml
 
 # ENV
 COMMAND_FILE = os.getenv("COMMAND_FILE", "/tmp/swarm-orchestration.command.yml")
-NODES_FILE = os.getenv("NODES_FILE", "/etc/swarm-orchestration/nodes.yml")  # ✅ correct
+NODES_FILE = os.getenv("NODES_FILE", "/etc/swarm-orchestration/nodes.yml")
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 RUN_ONCE = os.getenv("RUN_ONCE", "false").lower() == "true"
 LOOP_INTERVAL = int(os.getenv("LOOP_INTERVAL", "300"))
@@ -50,7 +50,7 @@ def bootstrap_swarm():
     sync_labels(advertise, nodes, node_map, prune=prune, dry_run=DRY_RUN, debug=DEBUG)
 
 def sighup_handler(signum, frame):
-    print("📣 SIGHUP: Re-running bootstrap now...")
+    print("\ud83d\uDDF3 SIGHUP: Re-running bootstrap now...")
     bootstrap_swarm()
 
 def run():

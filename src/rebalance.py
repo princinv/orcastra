@@ -11,6 +11,7 @@ from pathlib import Path
 from core.config_loader import load_yaml
 from lib.service_utils import get_service_node, force_update_service
 from lib.metrics import get_node_exporter_memory, get_docker_reported_memory, get_container_memory_usage
+from lib.rebalance_decision import should_rebalance
 
 CONFIG_PATH = "/etc/swarm-orchestration/rebalance_config.yml"
 DEPENDENCIES_PATH = "/etc/swarm-orchestration/dependencies.yml"
