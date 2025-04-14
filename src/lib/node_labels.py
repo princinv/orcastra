@@ -9,7 +9,7 @@ import time
 import logging
 from core.docker_client import client
 from lib.labels import apply_label, remove_label
-from lib.docker_helpers import get_service_node
+from lib.service_utils import get_service_node
 from lib.task_diagnostics import log_task_status
 
 

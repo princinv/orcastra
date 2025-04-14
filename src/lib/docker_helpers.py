@@ -1,3 +1,6 @@
+
+# lib/docker_helpers.py
+
 import subprocess
 import time
 import logging
@@ -55,4 +58,3 @@ def get_task_state(service_name, wait_timeout=5, debug=False):
         time.sleep(1)
 
     return None, None
-
