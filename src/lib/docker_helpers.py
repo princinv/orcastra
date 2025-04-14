@@ -76,3 +76,19 @@ def get_service_node(service_name, wait_timeout=5, debug=False):
         time.sleep(1)
 
     return None
+
+def get_task_state(tasks):
+    """
+    Returns the highest-priority task state among the provided tasks.
+    Expected to help the caller determine what the dominant service state is.
+    """
+    priority = [
+        "running", "starting", "ready", "preparing", "accepted",
+        "assigned", "pending", "allocated", "new",
+        "shutdown", "complete", "failed", "rejected", "remove", "orphaned"
+    ]
+    for state in priority:
+        for task in tasks:
+            if task.get("Status", {}).get("State") == state:
+                return state
+    return None
