@@ -12,7 +12,6 @@ from lib.labels import apply_label, remove_label
 from lib.service_utils import get_service_node
 from lib.task_diagnostics import log_task_status
 
-
 def label_anchors(anchor_list, stack_name, dry_run=False, debug=False):
     """
     Applies a label like gitea_db=true to the node currently running that service.
@@ -20,7 +19,6 @@ def label_anchors(anchor_list, stack_name, dry_run=False, debug=False):
     Retries up to 5 times over 15 seconds. Logs all failures, success, and skips.
     """
 
-    # --- Clear all prior anchor labels on startup ---
     logging.info("[label_anchors] Clearing old anchor labels")
     for node in client.nodes.list():
         nid = node.id
@@ -35,13 +33,12 @@ def label_anchors(anchor_list, stack_name, dry_run=False, debug=False):
                     except Exception as e:
                         logging.error(f"[label_anchors] ❌ Failed to remove label {anchor} from {hostname}: {e}")
 
-    # --- Main labeling loop ---
     for anchor in anchor_list:
         service_name = f"{stack_name}_{anchor}"
         node_id = None
 
         for attempt in range(5):
-            node_id = get_service_node(service_name, debug=debug)
+            node_id = get_service_node(client, service_name, debug=debug)
             if node_id and node_id != "starting":
                 break
             logging.debug(f"[label_anchors] Attempt {attempt + 1}/5 — {service_name} not ready (node_id={node_id}). Retrying...")
@@ -54,7 +51,6 @@ def label_anchors(anchor_list, stack_name, dry_run=False, debug=False):
 
         logging.info(f"[label_anchors] Labeling node {node_id} with {anchor}=true for service {service_name}")
 
-        # Remove the label from all other nodes
         for node in client.nodes.list():
             nid = node.id
             hostname = node.attrs["Description"]["Hostname"]
