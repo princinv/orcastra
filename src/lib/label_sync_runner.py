@@ -17,7 +17,7 @@ from core.docker_client import client
 from core.retry_state import retry_state
 from lib.node_labels import label_anchors
 from lib.retries import should_retry, record_retry, clear_retry
-from lib.docker_helpers import get_service_node
+from lib.docker_helpers import get_service_node, get_task_state
 from lib.service_utils import force_update_service
 from lib.task_diagnostics import log_task_status
 
@@ -29,10 +29,10 @@ POLLING_MODE = os.getenv("POLLING_MODE", "true").lower() == "true"
 EVENT_MODE = os.getenv("EVENT_MODE", "false").lower() == "true"
 RESTART_DEPENDENTS = os.getenv("RESTART_DEPENDENTS", "false").lower() == "true"
 DEFAULT_RETRY_INTERVALS = [2, 10, 60, 300, 900]
-MAX_MISMATCH_DURATION = int(os.getenv("MAX_MISMATCH_DURATION", "600"))  # seconds
+MAX_MISMATCH_DURATION = int(os.getenv("MAX_MISMATCH_DURATION", "600"))
 
 should_run = True
-mismatch_timestamps = {}  # Track how long a service has been mismatched
+mismatch_timestamps = {}
 
 # --- Config-Driven Overrides ---
 def retry_intervals_for(anchor_label, dependencies):
@@ -47,13 +47,7 @@ def should_restart(anchor_label, dependencies):
         return value.get("restart_dependents", RESTART_DEPENDENTS)
     return RESTART_DEPENDENTS
 
-# --- Task State Handling Logic ---
-IGNORED_STATES = {"new", "allocated", "pending"}
-WAITING_STATES = {"assigned", "accepted", "preparing", "ready", "starting"}
-FINISHED_STATES = {"complete", "shutdown"}
-FAILURE_STATES = {"failed", "rejected", "remove", "orphaned"}
-
-# --- Dependent Coordination Logic ---
+# --- Coordination Logic ---
 def update_dependents(client, dependencies):
     logging.info("[label_sync] Updating dependents for colocated anchors")
     service_node_map = {}
@@ -84,28 +78,14 @@ def update_dependents(client, dependencies):
                 service_node_map[full_dep_service] = dep_node
 
             now = datetime.utcnow()
-
             try:
-                # --- Still initializing ---
-                if dep_node == "starting":
+                if dep_node in (None, "starting"):
                     logging.info(f"⏳ {full_dep_service} is still initializing or pending scheduling. Skipping update.")
                     continue
 
-                # --- No task (fully failed or unschedulable) ---
-                if not dep_node:
-                    if should_retry(full_dep_service, retry_schedule):
-                        logging.warning(f"❌ {full_dep_service} not running. Retrying.")
-                        log_task_status(full_dep_service, context="dependent")
-                        force_update_service(client, full_dep_service)
-                    else:
-                        logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
-                    continue
-
-                # --- Node mismatch ---
                 if db_node != dep_node:
                     first_mismatch = mismatch_timestamps.get(full_dep_service, now)
                     mismatch_timestamps[full_dep_service] = first_mismatch
-
                     mismatch_duration = (now - first_mismatch).total_seconds()
                     logging.info(f"🔁 {full_dep_service} is not co-located with {anchor_label}. Mismatch for {int(mismatch_duration)}s")
 
@@ -118,12 +98,10 @@ def update_dependents(client, dependencies):
                         force_update_service(client, full_dep_service)
                     else:
                         logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
-                    continue
-
-                # --- Match: on correct node ---
-                logging.info(f"✅ {full_dep_service} already co-located with {anchor_label}")
-                clear_retry(full_dep_service)
-                mismatch_timestamps.pop(full_dep_service, None)
+                else:
+                    logging.info(f"✅ {full_dep_service} already co-located with {anchor_label}")
+                    clear_retry(full_dep_service)
+                    mismatch_timestamps.pop(full_dep_service, None)
 
             except Exception as e:
                 logging.error(f"🔥 Error handling {full_dep_service}: {e}")
