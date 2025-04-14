@@ -17,7 +17,7 @@ from core.docker_client import client
 from core.retry_state import retry_state
 from lib.node_labels import label_anchors
 from lib.retries import should_retry, record_retry, clear_retry
-from lib.docker_helpers import get_service_node, get_task_state
+from lib.docker_helpers import get_task_state
 from lib.service_utils import force_update_service
 from lib.task_diagnostics import log_task_status
 
@@ -66,10 +66,10 @@ def update_dependents(client, dependencies):
         # Cache anchor node
         db_node = service_node_map.get(db_service)
         if db_node is None:
-            db_node = get_service_node(db_service, debug=True)
+            _, db_node = get_task_state(db_service, debug=True)
             service_node_map[db_service] = db_node
 
-        if not db_node or db_node == "starting":
+        if not db_node:
             logging.warning(f"[label_sync] Anchor {db_service} is not running. Skipping.")
             log_task_status(db_service, context="anchor")
             continue
@@ -77,61 +77,45 @@ def update_dependents(client, dependencies):
         for dep in dependents:
             full_dep_service = f"{STACK_NAME}_{dep}"
             retry_schedule = retry_intervals_for(anchor_label, dependencies)
-
-            # Cache dependent node
-            dep_node = service_node_map.get(full_dep_service)
-            if dep_node is None:
-                # dep_node = get_service_node(full_dep_service, debug=True)
-                task_state, dep_node = get_task_state(full_dep_service, debug=True)
-
-                # and then handle like:
-                if task_state in IGNORED_STATES:
-                    logging.info(f"⏳ {full_dep_service} is in ignored state: {task_state}. Skipping update.")
-                    continue
-
-                if task_state in FAILURE_STATES:
-                    if should_retry(full_dep_service, retry_schedule):
-                        logging.warning(f"❌ {full_dep_service} failed (state={task_state}). Retrying.")
-                        force_update_service(client, full_dep_service)
-                    else:
-                        logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
-                    continue
-
-                # Add check for wrong node
-                if dep_node and dep_node != db_node:
-                    ...
-
-                service_node_map[full_dep_service] = dep_node
-
             now = datetime.utcnow()
-            try:
-                if dep_node in (None, "starting"):
-                    logging.info(f"⏳ {full_dep_service} is still initializing or pending scheduling. Skipping update.")
+
+            task_state, dep_node = get_task_state(full_dep_service, debug=True)
+
+            if task_state in IGNORED_STATES | WAITING_STATES:
+                logging.info(f"⏳ {full_dep_service} is still initializing (state={task_state}). Skipping update.")
+                continue
+
+            if task_state in FAILURE_STATES:
+                if should_retry(full_dep_service, retry_schedule):
+                    logging.warning(f"❌ {full_dep_service} failed (state={task_state}). Retrying.")
+                    force_update_service(client, full_dep_service)
+                else:
+                    logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
+                continue
+
+            if not dep_node:
+                logging.warning(f"[label_sync] {full_dep_service} has no resolved NodeID. Skipping.")
+                continue
+
+            if db_node != dep_node:
+                first_mismatch = mismatch_timestamps.get(full_dep_service, now)
+                mismatch_timestamps[full_dep_service] = first_mismatch
+                mismatch_duration = (now - first_mismatch).total_seconds()
+                logging.info(f"🔁 {full_dep_service} is not co-located with {anchor_label}. Mismatch for {int(mismatch_duration)}s")
+
+                if mismatch_duration >= MAX_MISMATCH_DURATION:
+                    logging.warning(f"⛔ {full_dep_service} has exceeded max mismatch duration. Skipping update.")
                     continue
 
-                if db_node != dep_node:
-                    first_mismatch = mismatch_timestamps.get(full_dep_service, now)
-                    mismatch_timestamps[full_dep_service] = first_mismatch
-                    mismatch_duration = (now - first_mismatch).total_seconds()
-                    logging.info(f"🔁 {full_dep_service} is not co-located with {anchor_label}. Mismatch for {int(mismatch_duration)}s")
-
-                    if mismatch_duration >= MAX_MISMATCH_DURATION:
-                        logging.warning(f"⛔ {full_dep_service} has exceeded max mismatch duration. Skipping update.")
-                        continue
-
-                    if should_retry(full_dep_service, retry_schedule):
-                        logging.info(f"[label_sync] Forcing update of {full_dep_service} after mismatch")
-                        force_update_service(client, full_dep_service)
-                    else:
-                        logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
+                if should_retry(full_dep_service, retry_schedule):
+                    logging.info(f"[label_sync] Forcing update of {full_dep_service} after mismatch")
+                    force_update_service(client, full_dep_service)
                 else:
-                    logging.info(f"✅ {full_dep_service} already co-located with {anchor_label}")
-                    clear_retry(full_dep_service)
-                    mismatch_timestamps.pop(full_dep_service, None)
-
-            except Exception as e:
-                logging.error(f"🔥 Error handling {full_dep_service}: {e}")
-                record_retry(full_dep_service)
+                    logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
+            else:
+                logging.info(f"✅ {full_dep_service} already co-located with {anchor_label}")
+                clear_retry(full_dep_service)
+                mismatch_timestamps.pop(full_dep_service, None)
 
 # --- Main Loop: Label Anchors + Update Dependents ---
 def main_loop():
