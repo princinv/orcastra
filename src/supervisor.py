@@ -7,11 +7,16 @@ supervisor.py
     • bootstrap_swarm — maintains Swarm cluster + node labels
     • rebalance       — memory-aware service rebalancing
 """
-
 import time
 import threading
 import sys
 import os
+
+import logging
+
+debug = os.getenv("DEBUG", "false").lower() == "true"
+logging.basicConfig(level=logging.DEBUG if debug else logging.INFO)
+
 
 print("[supervisor] Sleeping 10s to ensure mounts are ready...")
 time.sleep(10)
@@ -22,6 +27,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "core
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "lib")))
 
 print("[supervisor] sys.path:", sys.path)
+
+# --- Load persistent retry state before orchestrator threads start ---
+from lib.retries import load_retry_state
+load_retry_state()
 
 # --- Import all orchestrator modules ---
 import bootstrap_swarm

@@ -7,9 +7,16 @@ WORKDIR /src
 # Ensure Python can locate all modular packages
 ENV PYTHONPATH="/src:/src/core:/src/lib"
 
-# --- Install OS dependencies ---
+# --- Install OS and Docker CLI dependencies ---
 RUN apt-get update && \
-    apt-get install -y iputils-ping openssh-client && \
+    apt-get install -y \
+        iputils-ping \
+        openssh-client \
+        curl \
+        gnupg \
+        ca-certificates \
+        lsb-release \
+        docker.io && \
     rm -rf /var/lib/apt/lists/*
 
 # --- Install Python dependencies ---
@@ -25,6 +32,5 @@ COPY config/ /etc/swarm-orchestration/
 COPY scripts/ /usr/local/bin/
 
 # --- Default entrypoint ---
-    ENTRYPOINT ["python"]
-    CMD ["/src/supervisor.py"]
-    
+ENTRYPOINT ["python"]
+CMD ["/src/supervisor.py"]

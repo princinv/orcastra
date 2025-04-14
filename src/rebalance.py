@@ -8,13 +8,15 @@ import os
 import time
 import json
 import argparse
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from core.config_loader import load_yaml
 from core.docker_client import client
 from core.retry_state import retry_state
-from lib.service_utils import get_service_node, force_update_service
+from lib.docker_helpers import get_service_node
+from lib.service_utils import force_update_service
 from lib.metrics import get_node_exporter_memory, get_docker_reported_memory, get_container_memory_usage
 from lib.rebalance_decision import should_rebalance
 
@@ -48,7 +50,7 @@ def run_rebalance_loop(dry_run=False, debug=False):
         all_nodes = set()
 
         for service in services:
-            node = get_service_node(client, service)
+            node = get_service_node(client, service, debug=debug)
             if node:
                 all_nodes.add(node)
 
@@ -74,13 +76,26 @@ def run_rebalance_loop(dry_run=False, debug=False):
         moved = []
 
         for service in services:
-            current_node = get_service_node(client, service)
+            current_node = get_service_node(client, service, debug=debug)
             if not current_node:
+                print(f"[WARN] {service}: No running task with valid NodeID.")
                 if debug:
-                    print(f"[DEBUG] {service} has no running task. Skipping.")
+                    print(f"[DEBUG] Inspecting task status for {service} via 'docker service ps'...")
+                    try:
+                        result = subprocess.run(
+                            ["docker", "service", "ps", "--no-trunc", service],
+                            capture_output=True, text=True, timeout=5
+                        )
+                        print(result.stdout.strip())
+                    except Exception as e:
+                        print(f"[DEBUG] Failed to inspect service {service}: {e}")
                 continue
 
-            trigger, target = should_rebalance(service, current_node, free_mem, config, state, container_mem, dependencies, debug)
+            trigger, target = should_rebalance(
+                service, current_node, free_mem,
+                config, state, container_mem,
+                dependencies, debug
+            )
             if trigger:
                 print(f"[REBALANCE] {service}: {current_node} → {target}")
                 if not dry_run:
