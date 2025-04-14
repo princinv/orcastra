@@ -54,7 +54,9 @@ def sighup_handler(signum, frame):
     bootstrap_swarm()
 
 def run():
-    signal.signal(signal.SIGHUP, sighup_handler)
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGHUP, sighup_handler)
+
     if RUN_ONCE:
         bootstrap_swarm()
     else:

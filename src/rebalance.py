@@ -83,3 +83,6 @@ def save_state(state):
     Path(STATE_PATH).parent.mkdir(parents=True, exist_ok=True)
     with open(STATE_PATH, 'w') as f:
         json.dump(state, f, indent=2)
+
+def run():
+    run_rebalance_loop()
