@@ -3,22 +3,38 @@
 rebalance.py
 - Entrypoint for monitoring and rebalancing Swarm services based on memory.
 """
+
 import os
 import time
 import json
+import argparse
 from datetime import datetime
 from pathlib import Path
+
 from core.config_loader import load_yaml
 from core.docker_client import client
+from core.retry_state import retry_state
 from lib.service_utils import get_service_node, force_update_service
 from lib.metrics import get_node_exporter_memory, get_docker_reported_memory, get_container_memory_usage
 from lib.rebalance_decision import should_rebalance
 
+# --- Config Paths ---
 CONFIG_PATH = "/etc/swarm-orchestration/rebalance_config.yml"
 DEPENDENCIES_PATH = "/etc/swarm-orchestration/dependencies.yml"
 STATE_PATH = "/var/lib/swarm-orchestration/rebalance_state.json"
 
-def run_rebalance_loop():
+def load_state():
+    if Path(STATE_PATH).exists():
+        with open(STATE_PATH, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_state(state):
+    Path(STATE_PATH).parent.mkdir(parents=True, exist_ok=True)
+    with open(STATE_PATH, 'w') as f:
+        json.dump(state, f, indent=2)
+
+def run_rebalance_loop(dry_run=False, debug=False):
     config = load_yaml(CONFIG_PATH)
     dependencies = load_yaml(DEPENDENCIES_PATH) or {}
     state = load_state()
@@ -27,12 +43,10 @@ def run_rebalance_loop():
     exporter_nodes = config.get("node_exporter_nodes", {})
     services = list(config.get("services", {}).keys())
 
-    debug = os.getenv("DEBUG", "false").lower() == "true"
-    dry_run = os.getenv("DRY_RUN", "false").lower() == "true"
-
     while True:
         free_mem = {}
         all_nodes = set()
+
         for service in services:
             node = get_service_node(client, service)
             if node:
@@ -50,17 +64,29 @@ def run_rebalance_loop():
         free_mem.update(fallback)
 
         container_mem = get_container_memory_usage()
+
+        if debug:
+            print(f"[DEBUG] Memory availability: {free_mem}")
+            print("[DEBUG] Container memory usage:")
+            for name, mem in container_mem.items():
+                print(f"  - {name}: {mem} GB")
+
         moved = []
 
         for service in services:
             current_node = get_service_node(client, service)
             if not current_node:
+                if debug:
+                    print(f"[DEBUG] {service} has no running task. Skipping.")
                 continue
+
             trigger, target = should_rebalance(service, current_node, free_mem, config, state, container_mem, dependencies, debug)
             if trigger:
                 print(f"[REBALANCE] {service}: {current_node} → {target}")
                 if not dry_run:
-                    force_update_service(client, service)
+                    success = force_update_service(client, service)
+                    if not success:
+                        print(f"[ERROR] Failed to update service {service}.")
                 state[service] = {
                     "last_moved": datetime.utcnow().isoformat(),
                     "moved_to": target
@@ -70,21 +96,25 @@ def run_rebalance_loop():
                 print(f"[DEBUG] {service} remains on {current_node}")
 
         if debug:
-            print(f"[DEBUG] Rebalance summary — moved: {moved or 'none'}")
+            print("[DEBUG] Summary of this run:")
+            if moved:
+                print(f"  ✅ Services rebalanced: {', '.join(moved)}")
+            else:
+                print("  ⏸️ No services moved this cycle.")
 
         save_state(state)
         time.sleep(interval)
 
-def load_state():
-    if Path(STATE_PATH).exists():
-        with open(STATE_PATH, 'r') as f:
-            return json.load(f)
-    return {}
-
-def save_state(state):
-    Path(STATE_PATH).parent.mkdir(parents=True, exist_ok=True)
-    with open(STATE_PATH, 'w') as f:
-        json.dump(state, f, indent=2)
-
 def run():
-    run_rebalance_loop()
+    parser = argparse.ArgumentParser(description="Swarm Rebalancer")
+    parser.add_argument("--dry-run", action="store_true", help="Print intended actions without applying")
+    parser.add_argument("--debug", action="store_true", help="Enable debug output")
+    args, _ = parser.parse_known_args()
+
+    dry_run = args.dry_run or os.getenv("DRY_RUN", "false").lower() == "true"
+    debug = args.debug or os.getenv("DEBUG", "false").lower() == "true"
+
+    run_rebalance_loop(dry_run=dry_run, debug=debug)
+
+if __name__ == "__main__":
+    run()

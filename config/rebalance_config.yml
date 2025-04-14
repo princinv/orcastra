@@ -17,12 +17,12 @@ node_map:
   hl-node03-ubuntu: hl-node03-proxmox
 
 services:
-  semaphore_db:
-    cooldown_minutes: 30
-    memory_difference_gb: 3
+  # semaphore_db:
+  #   cooldown_minutes: 30
+  #   memory_difference_gb: 3
   gitea_db:
     cooldown_minutes: 30
     memory_difference_gb: 3
-  komodo_db:
-    cooldown_minutes: 30
-    memory_difference_gb: 3
+  # komodo_db:
+  #   cooldown_minutes: 30
+  #   memory_difference_gb: 3

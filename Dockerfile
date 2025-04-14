@@ -21,10 +21,10 @@ RUN mkdir -p /etc/swarm-orchestration /var/lib/swarm-orchestration /var/log/swar
 
 # --- Copy project structure ---
 COPY src/ /src/
-COPY core/ /src/core/
-COPY lib/ /src/lib/
 COPY config/ /etc/swarm-orchestration/
 COPY scripts/ /usr/local/bin/
 
 # --- Default entrypoint ---
-CMD ["python", "-m", "supervisor"]
+    ENTRYPOINT ["python"]
+    CMD ["/src/supervisor.py"]
+    

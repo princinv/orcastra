@@ -1,18 +1,31 @@
+#!/usr/bin/env python3
+"""
+bootstrap_swarm.py
+- Initializes and maintains Swarm membership and node labels.
+- Ensures node promotion, service labeling, and rejoining occur as expected.
+"""
+
+import os
+import signal
+import threading
+import time
+
 from core.config_loader import load_yaml
 from lib.bootstrap_tasks import check_swarm, get_join_token, join_node, get_node_map
 from lib.bootstrap_labels import sync_labels
 from lib.ssh_helpers import is_online, ssh
-import os, signal, threading, time, yaml
 
-# ENV
+# --- ENVIRONMENT VARIABLES ---
 COMMAND_FILE = os.getenv("COMMAND_FILE", "/tmp/swarm-orchestration.command.yml")
 NODES_FILE = os.getenv("NODES_FILE", "/etc/swarm-orchestration/nodes.yml")
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 RUN_ONCE = os.getenv("RUN_ONCE", "false").lower() == "true"
 LOOP_INTERVAL = int(os.getenv("LOOP_INTERVAL", "300"))
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
 should_run = True
 
+# --- MAIN BOOTSTRAP FUNCTION ---
 def bootstrap_swarm():
     config = load_yaml(NODES_FILE)
     leader = config.get("leader")
@@ -38,21 +51,25 @@ def bootstrap_swarm():
         ip = meta["ip"]
         if name == leader or not is_online(ip):
             continue
+
         if ssh(ip, "docker info | grep 'Swarm: active'", DEBUG).returncode != 0:
             join_node(ip, token, advertise, DEBUG)
             print(f"[bootstrap] {name} joined.")
 
     node_map = get_node_map(advertise, DEBUG)
+
     for name in nodes:
         if name in node_map:
             ssh(advertise, f"docker node promote {node_map[name]}", DEBUG)
 
     sync_labels(advertise, nodes, node_map, prune=prune, dry_run=DRY_RUN, debug=DEBUG)
 
+# --- SIGNAL SUPPORT ---
 def sighup_handler(signum, frame):
-    print("\ud83d\uDDF3 SIGHUP: Re-running bootstrap now...")
+    print("📣 SIGHUP received — re-running bootstrap now...")
     bootstrap_swarm()
 
+# --- ENTRYPOINT ---
 def run():
     if threading.current_thread() is threading.main_thread():
         signal.signal(signal.SIGHUP, sighup_handler)
