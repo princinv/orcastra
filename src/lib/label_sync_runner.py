@@ -21,11 +21,12 @@ from lib.docker_helpers import get_service_node, get_task_state
 from lib.service_utils import force_update_service
 from lib.task_diagnostics import log_task_status
 
-# --- Task State Categories ---
+# --- Task State Groups ---
 IGNORED_STATES = {"new", "allocated", "pending"}
 WAITING_STATES = {"assigned", "accepted", "preparing", "ready", "starting"}
-SUCCESS_STATES = {"running", "complete", "shutdown"}
+SUCCESS_STATES = {"running", "complete"}
 FAILURE_STATES = {"failed", "rejected", "remove", "orphaned"}
+TERMINAL_STATES = SUCCESS_STATES | FAILURE_STATES | {"shutdown"}
 
 # --- Environment Variables / Defaults ---
 DEPENDENCIES_FILE = os.getenv("DEPENDENCIES_FILE", "/etc/swarm-orchestration/dependencies.yml")

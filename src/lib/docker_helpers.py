@@ -8,6 +8,13 @@ import time
 import logging
 from core.docker_client import client
 
+# --- Task State Groups ---
+IGNORED_STATES = {"new", "allocated", "pending"}
+WAITING_STATES = {"assigned", "accepted", "preparing", "ready", "starting"}
+SUCCESS_STATES = {"running", "complete"}
+FAILURE_STATES = {"failed", "rejected", "remove", "orphaned"}
+TERMINAL_STATES = SUCCESS_STATES | FAILURE_STATES | {"shutdown"}
+
 def get_docker_node_memory(node_name):
     """
     Returns the memory in bytes for the specified Docker Swarm node by name.
@@ -77,28 +84,25 @@ def get_service_node(service_name, wait_timeout=5, debug=False):
 
     return None
 
-def get_task_state(service, debug=False):
-    """
-    Analyzes all tasks for a given service and returns:
-    - most relevant state for orchestration logic
-    - associated NodeID (if available)
-    """
+def get_service_node(service, debug=False):
     tasks = service.tasks()
-    task_priority = [
-        "running", "starting", "ready", "preparing", "accepted", "assigned",
-        "pending", "allocated", "new",
-        "shutdown", "complete",
-        "failed", "rejected", "remove", "orphaned"
-    ]
 
-    for state in task_priority:
-        for task in tasks:
-            task_state = task.get("Status", {}).get("State")
-            if task_state == state:
-                node_id = task.get("NodeID")
-                if debug:
-                    msg = task.get("Status", {}).get("Message", "")
-                    print(f"[get_task_state] {service.name} — State: {state}, Desired: {task.get('DesiredState')}, NodeID: {node_id}, Message: {msg}")
-                return state, node_id
+    node_id = None
+    fallback_state = None
 
-    return None, None
+    for task in tasks:
+        status = task.get("Status", {})
+        state = status.get("State")
+        node = task.get("NodeID")
+
+        if debug:
+            logging.debug(f"[get_service_node] {service.name} — State: {state}, Desired: {task.get('DesiredState')}, NodeID: {node}, Message: {status.get('Message')}")
+
+        if state == "running":
+            return node  # ✅ Running wins immediately
+        elif state in WAITING_STATES and fallback_state is None:
+            fallback_state = "starting"
+        elif state in FAILURE_STATES and not node_id:
+            fallback_state = None  # Only use if no valid tasks
+
+    return fallback_state or None
