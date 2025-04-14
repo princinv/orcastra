@@ -62,8 +62,8 @@ def update_dependents(client, dependencies):
             db_node = get_service_node(db_service, debug=True)
             service_node_map[db_service] = db_node
 
-        if not db_node:
-            logging.warning(f"[label_sync] Anchor {db_service} is not running. Skipping.")
+        if not db_node or db_node == "starting":
+            logging.info(f"[label_sync] Anchor {db_service} is still initializing or not running. Skipping.")
             log_task_status(db_service, context="anchor")
             continue
 
@@ -80,23 +80,16 @@ def update_dependents(client, dependencies):
             now = datetime.utcnow()
 
             try:
-                # --- No running task ---
-                if not dep_node:
-                    if should_retry(full_dep_service, retry_schedule):
-                        logging.warning(f"❌ {full_dep_service} not running. Retrying.")
-                        log_task_status(full_dep_service, context="dependent")
-                        force_update_service(client, full_dep_service)
-                    else:
-                        logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
+                if not dep_node or dep_node == "starting":
+                    logging.info(f"⏳ {full_dep_service} is still initializing or pending scheduling. Skipping update.")
                     continue
 
-                # --- Wrong node ---
                 if db_node != dep_node:
                     first_mismatch = mismatch_timestamps.get(full_dep_service, now)
                     mismatch_timestamps[full_dep_service] = first_mismatch
 
                     mismatch_duration = (now - first_mismatch).total_seconds()
-                    logging.info(f"🔁 {full_dep_service} is not co-located with {anchor_label}. Mismatch for {int(mismatch_duration)}s")
+                    logging.info(f"🔁 {full_dep_service} is on {dep_node}, expected {db_node}. Mismatch for {int(mismatch_duration)}s")
 
                     if mismatch_duration >= MAX_MISMATCH_DURATION:
                         logging.warning(f"⛔ {full_dep_service} has exceeded max mismatch duration. Skipping update.")
@@ -109,7 +102,6 @@ def update_dependents(client, dependencies):
                         logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
                     continue
 
-                # --- Already co-located ---
                 logging.info(f"✅ {full_dep_service} already co-located with {anchor_label}")
                 clear_retry(full_dep_service)
                 mismatch_timestamps.pop(full_dep_service, None)

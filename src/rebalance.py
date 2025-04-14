@@ -25,16 +25,21 @@ CONFIG_PATH = "/etc/swarm-orchestration/rebalance_config.yml"
 DEPENDENCIES_PATH = "/etc/swarm-orchestration/dependencies.yml"
 STATE_PATH = "/var/lib/swarm-orchestration/rebalance_state.json"
 
+IGNORED_STATES = {"pending", "preparing", "assigned", "starting", "ready"}  # Do not rebalance these
+
+
 def load_state():
     if Path(STATE_PATH).exists():
         with open(STATE_PATH, 'r') as f:
             return json.load(f)
     return {}
 
+
 def save_state(state):
     Path(STATE_PATH).parent.mkdir(parents=True, exist_ok=True)
     with open(STATE_PATH, 'w') as f:
         json.dump(state, f, indent=2)
+
 
 def run_rebalance_loop(dry_run=False, debug=False):
     config = load_yaml(CONFIG_PATH)
@@ -51,7 +56,7 @@ def run_rebalance_loop(dry_run=False, debug=False):
 
         for service in services:
             node = get_service_node(client, service, debug=debug)
-            if node:
+            if node and node not in IGNORED_STATES:
                 all_nodes.add(node)
 
         for node in all_nodes:
@@ -77,6 +82,11 @@ def run_rebalance_loop(dry_run=False, debug=False):
 
         for service in services:
             current_node = get_service_node(client, service, debug=debug)
+
+            if current_node in IGNORED_STATES:
+                print(f"[SKIP] {service} task is still initializing: {current_node}")
+                continue
+
             if not current_node:
                 print(f"[WARN] {service}: No running task with valid NodeID.")
                 if debug:
@@ -120,6 +130,7 @@ def run_rebalance_loop(dry_run=False, debug=False):
         save_state(state)
         time.sleep(interval)
 
+
 def run():
     parser = argparse.ArgumentParser(description="Swarm Rebalancer")
     parser.add_argument("--dry-run", action="store_true", help="Print intended actions without applying")
@@ -131,5 +142,7 @@ def run():
 
     run_rebalance_loop(dry_run=dry_run, debug=debug)
 
+
 if __name__ == "__main__":
     run()
+
