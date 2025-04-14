@@ -21,7 +21,7 @@
     
     # Install Python dependencies
     COPY requirements.txt .
-    RUN pip install --no-cache-dir --target=/build/site-packages -r requirements.txt
+    RUN pip install --no-cache-dir --prefix=/build -r requirements.txt
     
     # ---------- Stage 2: Final Runtime Image ----------
     FROM python:3.12-slim AS runtime
