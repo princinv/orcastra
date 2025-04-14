@@ -6,21 +6,21 @@ task_diagnostics.py
 
 import subprocess
 import logging
+import shutil
 
-def log_task_status(service_name, context="diagnostic"):
-    """
+def log_task_status(service_name, context="unknown"):
+    docker_path = shutil.which("docker") or "/usr/bin/docker"
+     """
     Logs the full output of `docker service ps` for the given service name.
     Used for diagnosing services marked as not running.
     """
     try:
         result = subprocess.run(
-            ["docker", "service", "ps", "--no-trunc", service_name],
-            capture_output=True, text=True, timeout=5
+            [docker_path, "service", "ps", "--no-trunc", service_name],
+            capture_output=True,
+            text=True,
+            timeout=5
         )
-        output = result.stdout.strip()
-        if output:
-            logging.debug(f"[{context}] Task status for {service_name}:\n{output}")
-        else:
-            logging.debug(f"[{context}] No task output for {service_name}")
+        logging.debug(f"[task_diagnostics] Task status for {service_name} ({context}):\n{result.stdout.strip()}")
     except Exception as e:
-        logging.debug(f"[{context}] Could not inspect {service_name}: {e}")
+        logging.debug(f"[task_diagnostics] Could not inspect {service_name} ({context}): {e}")
