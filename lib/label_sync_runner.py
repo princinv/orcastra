@@ -87,7 +87,7 @@ def main_loop():
         return
 
     logging.info("[label_sync] Running label sync main loop")
-    label_anchors(client, dependencies)
+    label_anchors(list(dependencies.keys()), client)
     update_dependents(client, dependencies)
 
 def event_listener():

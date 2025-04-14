@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from core.config_loader import load_yaml
+from core.docker_client import client
 from lib.service_utils import get_service_node, force_update_service
 from lib.metrics import get_node_exporter_memory, get_docker_reported_memory, get_container_memory_usage
 from lib.rebalance_decision import should_rebalance
@@ -33,7 +34,7 @@ def run_rebalance_loop():
         free_mem = {}
         all_nodes = set()
         for service in services:
-            node = get_service_node(service)
+            node = get_service_node(client, service)
             if node:
                 all_nodes.add(node)
 
@@ -52,14 +53,14 @@ def run_rebalance_loop():
         moved = []
 
         for service in services:
-            current_node = get_service_node(service)
+            current_node = get_service_node(client, service)
             if not current_node:
                 continue
             trigger, target = should_rebalance(service, current_node, free_mem, config, state, container_mem, dependencies, debug)
             if trigger:
                 print(f"[REBALANCE] {service}: {current_node} → {target}")
                 if not dry_run:
-                    force_update_service(None, service)  # You can add the client if needed
+                    force_update_service(client, service)
                 state[service] = {
                     "last_moved": datetime.utcnow().isoformat(),
                     "moved_to": target
