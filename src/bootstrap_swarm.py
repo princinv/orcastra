@@ -6,7 +6,7 @@ import os, signal, threading, time, yaml
 
 # ENV
 COMMAND_FILE = os.getenv("COMMAND_FILE", "/tmp/swarm-orchestration.command.yml")
-NODES_FILE = os.getenv("NODES_FILE", "/etc/swarm/nodes.yml")
+NODES_FILE = os.getenv("NODES_FILE", "/etc/swarm-orchestration/nodes.yml")  # ✅ correct
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 RUN_ONCE = os.getenv("RUN_ONCE", "false").lower() == "true"
 LOOP_INTERVAL = int(os.getenv("LOOP_INTERVAL", "300"))

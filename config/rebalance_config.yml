@@ -23,6 +23,6 @@ services:
   gitea_db:
     cooldown_minutes: 30
     memory_difference_gb: 3
-  komodo_db: {}
+  komodo_db:
     cooldown_minutes: 30
     memory_difference_gb: 3
