@@ -10,6 +10,7 @@ import time
 import signal
 import threading
 import logging
+from datetime import datetime
 
 from core.config_loader import load_yaml
 from core.docker_client import client
@@ -18,7 +19,7 @@ from lib.node_labels import label_anchors
 from lib.retries import should_retry, record_retry, clear_retry
 from lib.docker_helpers import get_service_node
 from lib.service_utils import force_update_service
-from lib.task_diagnostics import log_task_status  # ✅ Diagnostic logging for task inspection
+from lib.task_diagnostics import log_task_status
 
 # --- Environment Variables / Defaults ---
 DEPENDENCIES_FILE = os.getenv("DEPENDENCIES_FILE", "/etc/swarm-orchestration/dependencies.yml")
@@ -28,8 +29,10 @@ POLLING_MODE = os.getenv("POLLING_MODE", "true").lower() == "true"
 EVENT_MODE = os.getenv("EVENT_MODE", "false").lower() == "true"
 RESTART_DEPENDENTS = os.getenv("RESTART_DEPENDENTS", "false").lower() == "true"
 DEFAULT_RETRY_INTERVALS = [2, 10, 60, 300, 900]
+MAX_MISMATCH_DURATION = int(os.getenv("MAX_MISMATCH_DURATION", "600"))  # seconds
 
 should_run = True
+mismatch_timestamps = {}  # Track how long a service has been mismatched
 
 # --- Config-Driven Overrides ---
 def retry_intervals_for(anchor_label, dependencies):
@@ -74,6 +77,8 @@ def update_dependents(client, dependencies):
                 dep_node = get_service_node(full_dep_service)
                 service_node_map[full_dep_service] = dep_node
 
+            now = datetime.utcnow()
+
             try:
                 # --- No running task ---
                 if not dep_node:
@@ -87,8 +92,17 @@ def update_dependents(client, dependencies):
 
                 # --- Wrong node ---
                 if db_node != dep_node:
+                    first_mismatch = mismatch_timestamps.get(full_dep_service, now)
+                    mismatch_timestamps[full_dep_service] = first_mismatch
+
+                    mismatch_duration = (now - first_mismatch).total_seconds()
+                    logging.info(f"🔁 {full_dep_service} is not co-located with {anchor_label}. Mismatch for {int(mismatch_duration)}s")
+
+                    if mismatch_duration >= MAX_MISMATCH_DURATION:
+                        logging.warning(f"⛔ {full_dep_service} has exceeded max mismatch duration. Skipping update.")
+                        continue
+
                     if should_retry(full_dep_service, retry_schedule):
-                        logging.info(f"🔁 {full_dep_service} is not co-located with {anchor_label}. Retrying.")
                         force_update_service(client, full_dep_service)
                     else:
                         logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
@@ -97,6 +111,7 @@ def update_dependents(client, dependencies):
                 # --- Already co-located ---
                 logging.info(f"✅ {full_dep_service} already co-located with {anchor_label}")
                 clear_retry(full_dep_service)
+                mismatch_timestamps.pop(full_dep_service, None)
 
             except Exception as e:
                 logging.error(f"🔥 Error handling {full_dep_service}: {e}")
@@ -134,3 +149,4 @@ def run():
             time.sleep(RELABEL_TIME)
     elif EVENT_MODE:
         event_listener()
+
