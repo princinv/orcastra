@@ -77,18 +77,28 @@ def get_service_node(service_name, wait_timeout=5, debug=False):
 
     return None
 
-def get_task_state(tasks):
+def get_task_state(service, debug=False):
     """
-    Returns the highest-priority task state among the provided tasks.
-    Expected to help the caller determine what the dominant service state is.
+    Analyzes all tasks for a given service and returns:
+    - most relevant state for orchestration logic
+    - associated NodeID (if available)
     """
-    priority = [
-        "running", "starting", "ready", "preparing", "accepted",
-        "assigned", "pending", "allocated", "new",
-        "shutdown", "complete", "failed", "rejected", "remove", "orphaned"
+    tasks = service.tasks()
+    task_priority = [
+        "running", "starting", "ready", "preparing", "accepted", "assigned",
+        "pending", "allocated", "new",
+        "shutdown", "complete",
+        "failed", "rejected", "remove", "orphaned"
     ]
-    for state in priority:
+
+    for state in task_priority:
         for task in tasks:
-            if task.get("Status", {}).get("State") == state:
-                return state
-    return None
+            task_state = task.get("Status", {}).get("State")
+            if task_state == state:
+                node_id = task.get("NodeID")
+                if debug:
+                    msg = task.get("Status", {}).get("Message", "")
+                    print(f"[get_task_state] {service.name} — State: {state}, Desired: {task.get('DesiredState')}, NodeID: {node_id}, Message: {msg}")
+                return state, node_id
+
+    return None, None

@@ -21,6 +21,12 @@ from lib.docker_helpers import get_service_node, get_task_state
 from lib.service_utils import force_update_service
 from lib.task_diagnostics import log_task_status
 
+# --- Task State Categories ---
+IGNORED_STATES = {"new", "allocated", "pending"}
+WAITING_STATES = {"assigned", "accepted", "preparing", "ready", "starting"}
+SUCCESS_STATES = {"running", "complete", "shutdown"}
+FAILURE_STATES = {"failed", "rejected", "remove", "orphaned"}
+
 # --- Environment Variables / Defaults ---
 DEPENDENCIES_FILE = os.getenv("DEPENDENCIES_FILE", "/etc/swarm-orchestration/dependencies.yml")
 STACK_NAME = os.getenv("STACK_NAME", "swarm-dev")
@@ -74,7 +80,26 @@ def update_dependents(client, dependencies):
             # Cache dependent node
             dep_node = service_node_map.get(full_dep_service)
             if dep_node is None:
-                dep_node = get_service_node(full_dep_service, debug=True)
+                # dep_node = get_service_node(full_dep_service, debug=True)
+                task_state, dep_node = get_task_state(full_dep_service, debug=True)
+
+                # and then handle like:
+                if task_state in IGNORED_STATES:
+                    logging.info(f"⏳ {full_dep_service} is in ignored state: {task_state}. Skipping update.")
+                    continue
+
+                if task_state in FAILURE_STATES:
+                    if should_retry(full_dep_service, retry_schedule):
+                        logging.warning(f"❌ {full_dep_service} failed (state={task_state}). Retrying.")
+                        force_update_service(client, full_dep_service)
+                    else:
+                        logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
+                    continue
+
+                # Add check for wrong node
+                if dep_node and dep_node != db_node:
+                    ...
+
                 service_node_map[full_dep_service] = dep_node
 
             now = datetime.utcnow()
