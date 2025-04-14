@@ -59,7 +59,7 @@ def update_dependents(client, dependencies):
         # Cache anchor node
         db_node = service_node_map.get(db_service)
         if db_node is None:
-            db_node = get_service_node(db_service)
+            db_node = get_service_node(db_service, debug=True)
             service_node_map[db_service] = db_node
 
         if not db_node:
@@ -74,7 +74,7 @@ def update_dependents(client, dependencies):
             # Cache dependent node
             dep_node = service_node_map.get(full_dep_service)
             if dep_node is None:
-                dep_node = get_service_node(full_dep_service)
+                dep_node = get_service_node(full_dep_service, debug=True)
                 service_node_map[full_dep_service] = dep_node
 
             now = datetime.utcnow()
@@ -103,6 +103,7 @@ def update_dependents(client, dependencies):
                         continue
 
                     if should_retry(full_dep_service, retry_schedule):
+                        logging.info(f"[label_sync] Forcing update of {full_dep_service} after mismatch")
                         force_update_service(client, full_dep_service)
                     else:
                         logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
