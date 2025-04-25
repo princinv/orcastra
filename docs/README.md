@@ -8,13 +8,13 @@
 
 A modular container designed for **orchestrating Docker Swarm service placement**, ensuring **co-location of dependent services**, **automated failover**, and **memory-aware rebalancing** based on real-world resource metrics (via `node_exporter`).
 
-## 🌟 Purpose
+## 🎯 Purpose
 
 Docker Swarm alone doesn’t guarantee that dependent services (e.g., an app and its database) will be scheduled on the same node. This container provides:
 
 - 🔗 **Anchor-following** — ensures dependent services follow their "anchor" (usually a DB).
-- ↻ **Auto-restarts** — force-updates services that fail to meet placement constraints.
-- 📆 **Label-based orchestration** — updates node labels to reflect current anchor locations.
+- 🔁 **Auto-restarts** — force-updates services that fail to meet placement constraints.
+- 📦 **Label-based orchestration** — updates node labels to reflect current anchor locations.
 - 📉 **Resource-aware rebalancing** — migrates services to underutilized nodes using Prometheus metrics.
 - ⬆️ **Event and Polling modes** — runs continuously or triggers on container events.
 - ⚙️ **Command YAML interface** — easily trigger reconciliations, restarts, pauses, and more.
@@ -25,57 +25,38 @@ Docker Swarm alone doesn’t guarantee that dependent services (e.g., an app and
 
 ```bash
 swarm-orch/
-├── Dockerfile                     # Container definition
-├── requirements.txt               # Python dependencies
-├── commands/                      # CLI-triggerable swarm-orch commands
-│   └── swarm-orch.command.yml
-├── config/                        # Cluster-specific configuration files
-│   ├── dependencies.yml       # Anchor → dependent mappings
-│   ├── nodes.yml              # Node definitions, labels, and IPs
-│   └── rebalance_config.yml   # Per-service and default rebalance logic
-├── docs/                          # License, notes, and published README
-│   ├── LICENSE
-│   ├── notes.md
-│   └── README.md
-├── logs/                          # Runtime logs (container-mounted)
-│   └── swarm-labels.log
-├── scripts/                       # Optional CLI or trigger wrappers
-│   └── trigger-bootstrap.sh   # Sends SIGHUP to supervisor process
-├── src/                           # Entrypoints and all source code
-│   ├── __init__.py
-│   ├── bootstrap_swarm.py     # Swarm init/join/promotion & label sync
-│   ├── label_sync.py          # Entrypoint wrapper for label_sync_runner
-│   ├── rebalance.py           # Rebalancer control loop
-│   ├── supervisor.py          # Launches all orchestration threads
-│   ├── core/                  # Shared core modules (env/config/state)
-│   │   ├── __init__.py
-│   │   ├── config.py
-│   │   ├── config_loader.py
-│   │   ├── constants.py
-│   │   ├── docker_client.py
-│   │   ├── retry_state.py
-│   │   └── state.py
-│   ├── lib/                   # Modular orchestration logic
-│   │   ├── __init__.py
-│   │   ├── bootstrap_labels.py
-│   │   ├── bootstrap_tasks.py
-│   │   ├── dependency_loader.py
-│   │   ├── docker_helpers.py
-│   │   ├── labels.py
-│   │   ├── label_sync_runner.py
-│   │   ├── metrics.py
-│   │   ├── node_labels.py
-│   │   ├── rebalance_decision.py
-│   │   ├── retries.py
-│   │   ├── service_utils.py
-│   │   └── ssh_helpers.py
-│   └── __pycache__/           # Compiled Python cache (excluded in production)
-│       ├── bootstrap_swarm.cpython-312.pyc
-│       ├── label_dependencies.cpython-312.pyc
-│       ├── label_sync.cpython-312.pyc
-│       ├── rebalance.cpython-312.pyc
-│       ├── rebalance_services.cpython-312.pyc
-│       └── supervisor.cpython-312.pyc
+├── Dockerfile
+├── requirements.txt
+├── src/                        # Main entrypoint + orchestrator threads
+│   ├── bootstrap_swarm.py     # Joins/labels all swarm nodes, ensures correct Swarm state
+│   ├── label_sync.py          # Anchor-dependency logic, placement decisions, and retries
+│   ├── rebalance.py           # Memory-aware service rebalancer (uses node_exporter)
+│   └── supervisor.py          # Launches all modules in parallel
+├── core/                      # Global helpers and state
+│   ├── config.py              # ENV loader and default constants
+│   ├── config_loader.py       # Shared YAML config loading
+│   ├── constants.py           # Shared string constants (future use)
+│   ├── docker_client.py       # Docker SDK setup
+│   ├── retry_state.py         # Retry tracking for placement enforcement
+│   └── state.py               # JSON state persistence (used by rebalance)
+├── lib/                       # Modular logic
+│   ├── bootstrap_labels.py    # Adds/removes swarm labels based on config
+│   ├── bootstrap_tasks.py     # Swarm join/promotion/leader logic
+│   ├── dependency_loader.py   # Parses dependencies.yml (anchor → dependents)
+│   ├── docker_helpers.py      # Subprocess calls for service/node info
+│   ├── labels.py              # High-level label actions used by orchestrators
+│   ├── metrics_scraper.py     # Pulls metrics from node_exporter
+│   ├── node_labels.py         # Determines where services should run
+│   ├── rebalance_decision.py  # Logic to determine rebalance eligibility
+│   ├── retries.py             # Retry helper used across modules
+│   ├── service_update.py      # Performs rolling updates using Docker API
+│   └── ssh_helpers.py         # Runs SSH commands (used in bootstrap)
+├── config/                    # Runtime configuration
+│   ├── dependencies.yml       # Anchor ↔ dependent mappings
+│   ├── nodes.yml              # Node metadata (hostnames, IPs, labels)
+│   └── rebalance_config.yml   # Per-service and global rebalance settings
+└── logs/
+    └── swarm-labels.log
 ```
 
 ---
@@ -102,7 +83,7 @@ swarm-orch/
 
 ---
 
-## ↻ Runtime Behavior
+## 🔁 Runtime Behavior
 
 ### Entry Point: `supervisor.py`
 
@@ -119,7 +100,7 @@ for fn in [bootstrap_swarm.run, label_sync.run, rebalance.run]:
 
 ---
 
-## 🧹 Example Deployment (Docker Compose)
+## 🧚‍♂️ Example Deployment (Docker Compose)
 
 ```yaml
 services:
@@ -152,7 +133,7 @@ services:
 
 ---
 
-## 🎀 Status
+## 🌟 Status
 
 - ✅ Fully modularized
 - ✅ Multi-threaded entrypoint

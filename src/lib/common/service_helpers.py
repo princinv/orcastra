@@ -1,12 +1,29 @@
-# lib/service_utils.py
+"""
+service_helpers.py
+- Contains logic for:
+    - Determining which node a service is running on
+    - Forcibly triggering rolling updates via SDK or CLI fallback
+- Handles retry tracking when updates fail.
+"""
 
 import logging
 import time
+import subprocess
 from docker.errors import APIError
 from core.retry_state import retry_state
 
-# Get node ID where a service is running
 def get_service_node(client, service_name, wait_timeout=5):
+    """
+    Identify which node is currently running a given Swarm service.
+
+    Args:
+        client: Docker SDK client
+        service_name (str): Full service name (e.g. swarm-dev_gitea)
+        wait_timeout (int): Time in seconds to wait for a valid task
+
+    Returns:
+        str or None: Node ID where the service is running
+    """
     try:
         service = client.services.get(service_name)
         deadline = time.time() + wait_timeout
@@ -21,7 +38,6 @@ def get_service_node(client, service_name, wait_timeout=5):
                 if state == "running" and node_id:
                     logging.info(f"📍 {service_name} is running on node {node_id}")
                     return node_id
-
                 if state == "starting" and node_id:
                     logging.info(f"⏳ {service_name} is starting on node {node_id}, will retry later")
 
@@ -34,19 +50,25 @@ def get_service_node(client, service_name, wait_timeout=5):
                 f"NodeID={task.get('NodeID')}"
             )
         logging.warning(f"❌ No running task with valid NodeID found for {service_name}")
+
     except APIError as e:
         logging.warning(f"⚠️ Could not inspect service: {service_name} — {e}")
     except Exception as e:
         logging.error(f"🔥 Unexpected error checking node for {service_name}: {e}")
     return None
 
-# Force a rolling update on a service
 def force_update_service(client, service_name):
     """
-    Forces a rolling update of a service using either the Docker SDK or CLI.
-    Tracks retry state for orchestrator cooldown logic.
+    Force a rolling update of a Swarm service via Docker SDK or CLI.
+    Handles retry tracking and CLI fallback.
+
+    Args:
+        client: Docker SDK client
+        service_name (str): The name of the service to update
+
+    Returns:
+        bool: True on success, False on failure
     """
-    import subprocess  # local import to isolate CLI fallback
     try:
         service = client.services.get(service_name)
 

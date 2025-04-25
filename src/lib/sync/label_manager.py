@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-label_sync_runner.py
-- Main orchestration logic for managing anchor ↔ dependent service placement in Docker Swarm.
-- Triggered by the label_sync entrypoint.
+label_manager.py
+- Main orchestration logic for label synchronization and dependent service updates in Docker Swarm.
+- Anchors (e.g. databases) are located and labeled, and dependents are updated to co-locate.
+- Can be triggered manually or run continuously via main supervisor.
 """
 
 import os
@@ -14,12 +15,11 @@ from datetime import datetime
 
 from core.config_loader import load_yaml
 from core.docker_client import client
-from core.retry_state import retry_state
-from lib.node_labels import label_anchors
-from lib.retries import should_retry, record_retry, clear_retry
-from lib.docker_helpers import get_task_state
-from lib.service_utils import force_update_service
-from lib.task_diagnostics import log_task_status
+from core.retry_state import retry_state, should_retry, record_retry, clear_retry
+from lib.common.service_helpers import force_update_service
+from lib.sync.label_utils import label_anchors
+from lib.common.docker_helpers import get_task_state
+from lib.common.task_diagnostics import log_task_status
 
 # --- Task State Groups ---
 IGNORED_STATES = {"new", "allocated", "pending"}
@@ -28,7 +28,7 @@ SUCCESS_STATES = {"running", "complete"}
 FAILURE_STATES = {"failed", "rejected", "remove", "orphaned"}
 TERMINAL_STATES = SUCCESS_STATES | FAILURE_STATES | {"shutdown"}
 
-# --- Environment Variables / Defaults ---
+# --- Config via Environment Variables ---
 DEPENDENCIES_FILE = os.getenv("DEPENDENCIES_FILE", "/etc/swarm-orchestration/dependencies.yml")
 STACK_NAME = os.getenv("STACK_NAME", "swarm-dev")
 RELABEL_TIME = int(os.getenv("RELABEL_TIME", "60"))
@@ -41,7 +41,7 @@ MAX_MISMATCH_DURATION = int(os.getenv("MAX_MISMATCH_DURATION", "600"))
 should_run = True
 mismatch_timestamps = {}
 
-# --- Config-Driven Overrides ---
+# --- Retry & Restart Configuration ---
 def retry_intervals_for(anchor_label, dependencies):
     value = dependencies.get(anchor_label)
     if isinstance(value, dict):
@@ -54,7 +54,7 @@ def should_restart(anchor_label, dependencies):
         return value.get("restart_dependents", RESTART_DEPENDENTS)
     return RESTART_DEPENDENTS
 
-# --- Coordination Logic ---
+# --- Core Orchestration Logic ---
 def update_dependents(client, dependencies):
     logging.info("[label_sync] Updating dependents for colocated anchors")
     service_node_map = {}
@@ -63,7 +63,7 @@ def update_dependents(client, dependencies):
         dependents = config.get("services") if isinstance(config, dict) else config
         db_service = f"{STACK_NAME}_{anchor_label}"
 
-        # Cache anchor node
+        # Resolve and cache anchor node location
         db_node = service_node_map.get(db_service)
         if db_node is None:
             _, db_node = get_task_state(db_service, debug=True)
@@ -117,7 +117,7 @@ def update_dependents(client, dependencies):
                 clear_retry(full_dep_service)
                 mismatch_timestamps.pop(full_dep_service, None)
 
-# --- Main Loop: Label Anchors + Update Dependents ---
+# --- Entrypoint Loop ---
 def main_loop():
     dependencies = load_yaml(DEPENDENCIES_FILE)
     if not dependencies:
@@ -128,17 +128,12 @@ def main_loop():
     label_anchors(list(dependencies.keys()), STACK_NAME, debug=True)
     update_dependents(client, dependencies)
 
-# --- Placeholder for Event-Driven Mode ---
-def event_listener():
-    logging.info("[label_sync] Event listener mode not yet implemented.")
-    pass
-
-# --- Signal Support (e.g. docker kill -s HUP) ---
+# --- Signal Support for SIGHUP Rerun ---
 def signal_handler(signum, frame):
     logging.info("[label_sync] SIGHUP received — forcing label sync now")
     main_loop()
 
-# --- Entrypoint ---
+# --- Entrypoint Dispatcher ---
 def run():
     if threading.current_thread() is threading.main_thread():
         signal.signal(signal.SIGHUP, signal_handler)
@@ -148,5 +143,4 @@ def run():
             main_loop()
             time.sleep(RELABEL_TIME)
     elif EVENT_MODE:
-        event_listener()
-
+        logging.info("[label_sync] Event-driven mode is not implemented yet.")
