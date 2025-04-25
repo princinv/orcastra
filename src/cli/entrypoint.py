@@ -11,7 +11,22 @@ entrypoint.py
 import sys
 import signal
 from runner import label_sync, rebalance  # Extendable
+import os
+import stat
 
+# Ensure SSH key permissions are set correctly
+def prepare_ssh_key_permissions():
+    key_path = "/root/.ssh/swarm-orch_ed25519"
+    if os.path.exists(key_path):
+        os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)  # chmod 600
+        config_path = "/root/.ssh/config"
+        with open(config_path, "w") as f:
+            f.write("Host *\n\tStrictHostKeyChecking no\n")
+        os.chmod(config_path, stat.S_IRUSR | stat.S_IWUSR)
+
+prepare_ssh_key_permissions()
+
+# Enable CLI commands
 def usage():
     print("Usage: python entrypoint.py <command>")
     print("Available commands:")

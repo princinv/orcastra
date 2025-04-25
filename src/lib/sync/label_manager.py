@@ -20,6 +20,8 @@ from lib.common.service_helpers import force_update_service
 from lib.sync.label_utils import label_anchors
 from lib.common.docker_helpers import get_task_state
 from lib.common.task_diagnostics import log_task_status
+from lib.sync.label_utils import get_anchor_state_for_failover
+
 
 # --- Task State Groups ---
 IGNORED_STATES = {"new", "allocated", "pending"}
@@ -40,6 +42,8 @@ MAX_MISMATCH_DURATION = int(os.getenv("MAX_MISMATCH_DURATION", "600"))
 
 should_run = True
 mismatch_timestamps = {}
+missing_anchors = {}
+
 
 # --- Retry & Restart Configuration ---
 def retry_intervals_for(anchor_label, dependencies):
@@ -56,66 +60,85 @@ def should_restart(anchor_label, dependencies):
 
 # --- Core Orchestration Logic ---
 def update_dependents(client, dependencies):
-    logging.info("[label_sync] Updating dependents for colocated anchors")
-    service_node_map = {}
+    logging.info("[label_sync] Updating dependents strictly based on anchor status and configured cooldowns.")
 
     for anchor_label, config in dependencies.items():
         dependents = config.get("services") if isinstance(config, dict) else config
-        db_service = f"{STACK_NAME}_{anchor_label}"
+        anchor_service = f"{STACK_NAME}_{anchor_label}"
+        retry_intervals = retry_intervals_for(anchor_label, dependencies)
 
-        # Resolve and cache anchor node location
-        db_node = service_node_map.get(db_service)
-        if db_node is None:
-            _, db_node = get_task_state(db_service, debug=True)
-            service_node_map[db_service] = db_node
+        anchor_state, anchor_node = get_anchor_state_for_failover(anchor_service, debug=True)
 
-        if not db_node:
-            logging.warning(f"[label_sync] Anchor {db_service} is not running. Skipping.")
-            log_task_status(db_service, context="anchor")
+        # Scenario 1: Anchor initializing, skip everything
+        if anchor_state in WAITING_STATES:
+            logging.info(f"[label_sync] Anchor {anchor_service} initializing (state={anchor_state}). Waiting, no restarts yet.")
             continue
 
-        for dep in dependents:
-            full_dep_service = f"{STACK_NAME}_{dep}"
-            retry_schedule = retry_intervals_for(anchor_label, dependencies)
-            now = datetime.utcnow()
+        # Scenario 2: Anchor failed or unavailable
+        if anchor_state in FAILURE_STATES or anchor_node is None:
+            logging.warning(f"[label_sync] Anchor {anchor_service} failed (state={anchor_state}). Considering restart per cooldown.")
 
-            task_state, dep_node = get_task_state(full_dep_service, debug=True)
+            # ONLY restart anchor if cooldown allows
+            if should_retry(anchor_service, retry_intervals):
+                logging.warning(f"[label_sync] Restarting anchor {anchor_service} per cooldown settings.")
+                record_retry(anchor_service)
+                force_update_service(client, anchor_service)
+            else:
+                logging.info(f"[label_sync] Anchor {anchor_service} in cooldown. Skipping anchor restart.")
 
-            if task_state in IGNORED_STATES | WAITING_STATES:
-                logging.info(f"⏳ {full_dep_service} is still initializing (state={task_state}). Skipping update.")
-                continue
+            # If configured, handle dependent restarts explicitly
+            restart_dependents = config.get('restart_dependents', False)
+            if restart_dependents:
+                for dep in dependents:
+                    dep_service = f"{STACK_NAME}_{dep}"
+                    if should_retry(dep_service, retry_intervals):
+                        logging.warning(f"[label_sync] Restarting dependent {dep_service} due to anchor failure per cooldown.")
+                        record_retry(dep_service)
+                        force_update_service(client, dep_service)
+                    else:
+                        logging.debug(f"[label_sync] Dependent {dep_service} cooldown active, skipping restart.")
+            continue
 
-            if task_state in FAILURE_STATES:
-                if should_retry(full_dep_service, retry_schedule):
-                    logging.warning(f"❌ {full_dep_service} failed (state={task_state}). Retrying.")
-                    force_update_service(client, full_dep_service)
-                else:
-                    logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
-                continue
+        # Scenario 3: Anchor running normally, verify dependents colocated
+        if anchor_state == "running":
+            for dep in dependents:
+                dep_service = f"{STACK_NAME}_{dep}"
+                task_state, dep_node = get_task_state(dep_service, debug=True)
 
-            if not dep_node:
-                logging.warning(f"[label_sync] {full_dep_service} has no resolved NodeID. Skipping.")
-                continue
-
-            if db_node != dep_node:
-                first_mismatch = mismatch_timestamps.get(full_dep_service, now)
-                mismatch_timestamps[full_dep_service] = first_mismatch
-                mismatch_duration = (now - first_mismatch).total_seconds()
-                logging.info(f"🔁 {full_dep_service} is not co-located with {anchor_label}. Mismatch for {int(mismatch_duration)}s")
-
-                if mismatch_duration >= MAX_MISMATCH_DURATION:
-                    logging.warning(f"⛔ {full_dep_service} has exceeded max mismatch duration. Skipping update.")
+                if not dep_node:
+                    logging.warning(f"[label_sync] {dep_service} has no valid NodeID, skipping temporarily.")
                     continue
 
-                if should_retry(full_dep_service, retry_schedule):
-                    logging.info(f"[label_sync] Forcing update of {full_dep_service} after mismatch")
-                    force_update_service(client, full_dep_service)
+                if task_state in IGNORED_STATES | WAITING_STATES:
+                    logging.debug(f"[label_sync] {dep_service} is initializing (state={task_state}), skipping.")
+                    continue
+
+                if dep_node == anchor_node:
+                    logging.debug(f"[label_sync] ✅ {dep_service} correctly colocated with anchor {anchor_label}.")
+                    clear_retry(dep_service)
+                    mismatch_timestamps.pop(dep_service, None)
+                    continue
+
+                # Handle mismatch (dependent on wrong node)
+                now = datetime.utcnow()
+                first_mismatch = mismatch_timestamps.get(dep_service, now)
+                mismatch_timestamps[dep_service] = first_mismatch
+                mismatch_duration = (now - first_mismatch).total_seconds()
+
+                logging.info(f"[label_sync] {dep_service} mismatch detected for {int(mismatch_duration)}s (should follow {anchor_node}).")
+
+                if mismatch_duration >= MAX_MISMATCH_DURATION:
+                    logging.warning(f"[label_sync] {dep_service} mismatch duration exceeded. Skipping further updates for now.")
+                    continue
+
+                if should_retry(dep_service, retry_intervals):
+                    logging.info(f"[label_sync] Restarting {dep_service} due to mismatch per cooldown.")
+                    record_retry(dep_service)
+                    force_update_service(client, dep_service)
                 else:
-                    logging.info(f"⏳ Cooldown: Skipping retry for {full_dep_service}")
-            else:
-                logging.info(f"✅ {full_dep_service} already co-located with {anchor_label}")
-                clear_retry(full_dep_service)
-                mismatch_timestamps.pop(full_dep_service, None)
+                    logging.debug(f"[label_sync] {dep_service} cooldown active, skipping restart.")
+
+    logging.info("[label_sync] Dependent services updated respecting anchor-specific cooldown rules.")
 
 # --- Entrypoint Loop ---
 def main_loop():

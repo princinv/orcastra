@@ -1,49 +1,47 @@
-"""
-rebalance_decision.py
-- Encapsulates decision logic for when a service should be rebalanced to another node.
-- Provides an async rebalance loop for continuous monitoring.
-"""
-
 from datetime import datetime, timedelta
 import asyncio
 import logging
+from time import time
+
+from core.constants import DEFAULT_REBALANCE_BUFFER_GB
+
+rebalance_attempts_total = 0
+rebalance_success_total = 0
+rebalance_failures_total = 0
+rebalance_last_duration_seconds = 0.0
 
 # --- Decision Logic ---
 
-def should_rebalance(service, current_node, free_mem_by_node, config, state, container_mem, dependencies, debug=False):
-    """
-    Evaluate whether a service should be rebalanced to a new node based on memory metrics.
-
-    Args:
-        service (str): The Swarm service name.
-        current_node (str): Node where the service is currently running.
-        free_mem_by_node (dict): Memory available per node (in GB).
-        config (dict): Rebalance policy (cooldown, sustained time, thresholds).
-        state (dict): Service state from disk (first_detected, etc.).
-        container_mem (dict): Memory usage (in GB) per container.
-        dependencies (dict): Services to co-locate with (same-node constraints).
-        debug (bool): If True, enables verbose decision output (currently unused).
-
-    Returns:
-        tuple: (bool, str or None) - Should rebalance, and which node to target if applicable.
-    """
+def should_rebalance(service, current_node, free_mem_by_node, config, state, container_mem, dependencies, preferred_node=None, debug=False):
     now = datetime.utcnow()
     cooldown = config['default'].get('cooldown_minutes', 15)
     sustained = config['default'].get('sustained_high_minutes', 10)
     threshold = config['default'].get('memory_difference_gb', 2)
 
-    current_mem = free_mem_by_node.get(current_node)
-    if current_mem is None:
-        return False, None
-
-    better_nodes = [n for n, mem in free_mem_by_node.items() if mem - current_mem >= threshold]
-    if len(better_nodes) < 2:
-        state.pop(service, None)
+    if current_node not in free_mem_by_node:
         return False, None
 
     total_mem = container_mem.get(service, 0)
     for dep in dependencies.get(service, []):
         total_mem += container_mem.get(dep, 0)
+
+    rebalance_buffer = config['default'].get('rebalance_buffer_gb', DEFAULT_REBALANCE_BUFFER_GB)
+
+    if preferred_node and preferred_node != current_node:
+        preferred_mem = free_mem_by_node.get(preferred_node)
+        if preferred_mem is not None:
+            source_mem = free_mem_by_node[current_node]
+            predicted_source_mem = source_mem + total_mem
+            predicted_target_mem = preferred_mem - total_mem
+
+            if (predicted_target_mem - predicted_source_mem) >= rebalance_buffer:
+                logging.info(f"[rebalance] {service} should move to preferred node {preferred_node} (currently on {current_node})")
+                return True, preferred_node
+
+    better_nodes = [n for n, mem in free_mem_by_node.items() if mem - free_mem_by_node[current_node] >= threshold]
+    if len(better_nodes) < 1:
+        state.pop(service, None)
+        return False, None
 
     max_delta = max(free_mem_by_node.values()) - min(free_mem_by_node.values())
     if total_mem >= max_delta:
@@ -56,22 +54,31 @@ def should_rebalance(service, current_node, free_mem_by_node, config, state, con
     first_seen = datetime.fromisoformat(state[service]['first_detected'])
     if now - first_seen >= timedelta(minutes=sustained):
         best = max(better_nodes, key=lambda n: free_mem_by_node[n])
-        return True, best
+
+        source_mem = free_mem_by_node[current_node]
+        target_mem = free_mem_by_node[best]
+
+        predicted_source_mem = source_mem + total_mem
+        predicted_target_mem = target_mem - total_mem
+
+        if (predicted_target_mem - predicted_source_mem) >= rebalance_buffer:
+            return True, best
+        else:
+            logging.info(f"[rebalance] Skipping move for {service}: improvement less than {rebalance_buffer} GB after accounting for dependents.")
+            return False, None
 
     return False, None
 
 # --- Async Rebalance Loop ---
 
 async def run_rebalance_loop():
-    """
-    Main async loop for running rebalance decisions.
-    Periodically checks memory usage and triggers service moves.
-    """
     from core.config import REBALANCE_CONFIG_PATH
     from core.config_loader import load_yaml
     from core.state import load_state, save_state
-    from lib.metrics.metrics_helpers import get_node_exporter_memory, get_docker_reported_memory, get_container_memory_usage
+    from lib.metrics.metrics_helpers import get_node_exporter_memory, get_container_memory_usage
     from core.docker_client import client
+
+    global rebalance_attempts_total, rebalance_success_total, rebalance_failures_total, rebalance_last_duration_seconds
 
     config = load_yaml(REBALANCE_CONFIG_PATH)
     state = load_state()
@@ -81,6 +88,7 @@ async def run_rebalance_loop():
 
     while True:
         logging.info("[rebalance] Checking memory stats for rebalancing decisions...")
+        start_time = time()
 
         free_mem_by_node = {}
         for node, url in exporters.items():
@@ -98,8 +106,17 @@ async def run_rebalance_loop():
 
         for service in container_mem.keys():
             try:
+                svc_obj = client.services.get(service)
+                labels = svc_obj.attrs['Spec'].get('Labels', {})
+
+                if labels.get("orchestration.rebalance", "true").lower() != "true":
+                    logging.debug(f"[rebalance] Skipping {service} due to orchestration.rebalance=false")
+                    continue
+
+                preferred_node = labels.get("orchestration.preferred.node")
+
                 current_node = None
-                tasks = client.services.get(service).tasks()
+                tasks = svc_obj.tasks()
                 for task in tasks:
                     if task.get('Status', {}).get('State') == 'running':
                         current_node = task.get('NodeID')
@@ -108,18 +125,28 @@ async def run_rebalance_loop():
                 if not current_node:
                     continue
 
+                if preferred_node and current_node != preferred_node:
+                    logging.debug(f"[rebalance] {service} prefers node {preferred_node}. Currently on {current_node}.")
+
+                rebalance_attempts_total += 1
+
                 should_move, target_node = should_rebalance(
-                    service, current_node, free_mem_by_node, config, state, container_mem, dependencies
+                    service, current_node, free_mem_by_node, config, state, container_mem, dependencies, preferred_node=preferred_node
                 )
 
                 if should_move and target_node:
                     logging.warning(f"[rebalance] Triggering rebalance of {service} to {target_node}")
-                    client.services.get(service).update(force_update=True)
+                    svc_obj.update(force_update=True)
+                    rebalance_success_total += 1
                     state[service]['last_moved'] = datetime.utcnow().isoformat()
                     state[service]['moved_to'] = target_node
 
             except Exception as e:
                 logging.error(f"[rebalance] Failed to evaluate rebalance for {service}: {e}")
+                rebalance_failures_total += 1
+
+        gc_duration = time() - start_time
+        rebalance_last_duration_seconds = gc_duration
 
         save_state(state)
         await asyncio.sleep(loop_interval)
