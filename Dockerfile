@@ -8,11 +8,12 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH="/src:/src/lib:/src/runner:/src/core"
 
 # --- Install OS dependencies ---
-    RUN apt-get update && \
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         docker.io \
         iputils-ping \
-        openssh-client && \
+        openssh-client \
+        logrotate && \
     rm -rf /var/lib/apt/lists/*
 
 # --- Install Python dependencies ---

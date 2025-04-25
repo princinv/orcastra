@@ -20,13 +20,15 @@ from fastapi.responses import PlainTextResponse
 import uvicorn
 
 from core.config import DEBUG
-from runner import label_sync, rebalance, bootstrap
+from core.docker_client import is_leader_node
+from runner import label_sync, label_manager, rebalance, bootstrap
 from runner.static_labels import run as run_static_label_sync
 from runner.change_detection import run as start_file_watcher
 from runner.deploy_node_exporter import deploy as deploy_node_exporter
 from runner import gc_prune
 from runner import rebalance_decision
 from runner import autoheal
+from runner import log_rotate
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -80,6 +82,21 @@ autoheal_success_total {autoheal.autoheal_success_total}
 # HELP autoheal_failures_total Failed autoheal operations
 # TYPE autoheal_failures_total counter
 autoheal_failures_total {autoheal.autoheal_failures_total}
+# HELP swarm_orch_leader 1 if this instance is Swarm leader, 0 if follower
+# TYPE swarm_orch_leader gauge
+# HELP anchor_updates_total Total anchor services label updates
+# TYPE anchor_updates_total counter
+anchor_updates_total {label_manager.anchor_updates_total}
+# HELP dependent_updates_total Total dependent services updated
+# TYPE dependent_updates_total counter
+dependent_updates_total {label_manager.dependent_updates_total}
+# HELP anchor_sync_errors_total Total errors during anchor-dependent sync
+# TYPE anchor_sync_errors_total counter
+anchor_sync_errors_total {label_manager.anchor_sync_errors_total}
+# HELP anchor_sync_last_duration_seconds Duration of last sync in seconds
+# TYPE anchor_sync_last_duration_seconds gauge
+anchor_sync_last_duration_seconds {label_manager.anchor_sync_last_duration_seconds}
+swarm_orch_leader {1 if is_leader_node() else 0}
 """,
         media_type="text/plain"
     )
@@ -94,13 +111,26 @@ Thread(target=start_file_watcher, daemon=True).start()
 # --- Main Async Orchestration ---
 async def main():
     try:
-        await asyncio.gather(
-            label_sync.run(),
-            bootstrap.run(),
-            rebalance.run(),
+        tasks = []
+
+        if is_leader_node():
+            logging.info("[swarm-orch] Leadership status: LEADER — running global orchestration tasks.")
+            tasks += [
+                label_sync.run(),
+                bootstrap.run(),
+                rebalance.run(),
+            ]
+        else:
+            logging.info("[swarm-orch] Leadership status: FOLLOWER — skipping global orchestration tasks.")
+
+        # Always-run safe tasks
+        tasks += [
             gc_prune.run(),
             autoheal.run(),
-        )
+            log_rotate.run(),
+        ]
+
+        await asyncio.gather(*tasks)
     except asyncio.CancelledError:
         print("📴 Shutting down orchestrators cleanly...")
 

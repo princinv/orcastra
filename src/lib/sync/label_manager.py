@@ -22,6 +22,12 @@ from lib.common.docker_helpers import get_task_state
 from lib.common.task_diagnostics import log_task_status
 from lib.sync.label_utils import get_anchor_state_for_failover
 
+# --- Metrics ---
+anchor_updates_total = 0
+dependent_updates_total = 0
+dependent_force_update_failures_total = 0
+anchor_sync_errors_total = 0
+anchor_sync_last_duration_seconds = 0.0
 
 # --- Task State Groups ---
 IGNORED_STATES = {"new", "allocated", "pending"}
@@ -44,7 +50,6 @@ should_run = True
 mismatch_timestamps = {}
 missing_anchors = {}
 
-
 # --- Retry & Restart Configuration ---
 def retry_intervals_for(anchor_label, dependencies):
     value = dependencies.get(anchor_label)
@@ -60,6 +65,7 @@ def should_restart(anchor_label, dependencies):
 
 # --- Core Orchestration Logic ---
 def update_dependents(client, dependencies):
+    global dependent_updates_total
     logging.info("[label_sync] Updating dependents strictly based on anchor status and configured cooldowns.")
 
     for anchor_label, config in dependencies.items():
@@ -69,16 +75,13 @@ def update_dependents(client, dependencies):
 
         anchor_state, anchor_node = get_anchor_state_for_failover(anchor_service, debug=True)
 
-        # Scenario 1: Anchor initializing, skip everything
         if anchor_state in WAITING_STATES:
             logging.info(f"[label_sync] Anchor {anchor_service} initializing (state={anchor_state}). Waiting, no restarts yet.")
             continue
 
-        # Scenario 2: Anchor failed or unavailable
         if anchor_state in FAILURE_STATES or anchor_node is None:
             logging.warning(f"[label_sync] Anchor {anchor_service} failed (state={anchor_state}). Considering restart per cooldown.")
 
-            # ONLY restart anchor if cooldown allows
             if should_retry(anchor_service, retry_intervals):
                 logging.warning(f"[label_sync] Restarting anchor {anchor_service} per cooldown settings.")
                 record_retry(anchor_service)
@@ -86,7 +89,6 @@ def update_dependents(client, dependencies):
             else:
                 logging.info(f"[label_sync] Anchor {anchor_service} in cooldown. Skipping anchor restart.")
 
-            # If configured, handle dependent restarts explicitly
             restart_dependents = config.get('restart_dependents', False)
             if restart_dependents:
                 for dep in dependents:
@@ -95,11 +97,11 @@ def update_dependents(client, dependencies):
                         logging.warning(f"[label_sync] Restarting dependent {dep_service} due to anchor failure per cooldown.")
                         record_retry(dep_service)
                         force_update_service(client, dep_service)
+                        dependent_updates_total += 1
                     else:
                         logging.debug(f"[label_sync] Dependent {dep_service} cooldown active, skipping restart.")
             continue
 
-        # Scenario 3: Anchor running normally, verify dependents colocated
         if anchor_state == "running":
             for dep in dependents:
                 dep_service = f"{STACK_NAME}_{dep}"
@@ -119,7 +121,6 @@ def update_dependents(client, dependencies):
                     mismatch_timestamps.pop(dep_service, None)
                     continue
 
-                # Handle mismatch (dependent on wrong node)
                 now = datetime.utcnow()
                 first_mismatch = mismatch_timestamps.get(dep_service, now)
                 mismatch_timestamps[dep_service] = first_mismatch
@@ -135,6 +136,7 @@ def update_dependents(client, dependencies):
                     logging.info(f"[label_sync] Restarting {dep_service} due to mismatch per cooldown.")
                     record_retry(dep_service)
                     force_update_service(client, dep_service)
+                    dependent_updates_total += 1
                 else:
                     logging.debug(f"[label_sync] {dep_service} cooldown active, skipping restart.")
 
@@ -142,14 +144,26 @@ def update_dependents(client, dependencies):
 
 # --- Entrypoint Loop ---
 def main_loop():
-    dependencies = load_yaml(DEPENDENCIES_FILE)
-    if not dependencies:
-        logging.warning("[label_sync] No dependencies found.")
-        return
+    global anchor_updates_total, anchor_sync_errors_total, anchor_sync_last_duration_seconds
 
-    logging.info("[label_sync] Running label sync main loop")
-    label_anchors(list(dependencies.keys()), STACK_NAME, debug=True)
-    update_dependents(client, dependencies)
+    start_time = time.time()
+    try:
+        dependencies = load_yaml(DEPENDENCIES_FILE)
+        if not dependencies:
+            logging.warning("[label_sync] No dependencies found.")
+            return
+
+        logging.info("[label_sync] Running label sync main loop")
+        label_anchors(list(dependencies.keys()), STACK_NAME, debug=True)
+        anchor_updates_total += 1
+        update_dependents(client, dependencies)
+
+    except Exception as e:
+        logging.error(f"[label_sync] Unexpected error during label sync: {e}")
+        anchor_sync_errors_total += 1
+
+    finally:
+        anchor_sync_last_duration_seconds = time.time() - start_time
 
 # --- Signal Support for SIGHUP Rerun ---
 def signal_handler(signum, frame):

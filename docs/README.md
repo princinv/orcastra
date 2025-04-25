@@ -147,3 +147,33 @@ services:
 
 Maintained by [@princinv](https://github.com/princinv)  
 PRs welcome!
+
+
+# TODO: unintegrated
+
+/src/
+├── runner/        # 🧩 Entry and orchestration scripts (lightweight as possible)
+│   ├── autoheal.py          # Local autoheal (socket actions)
+│   ├── bootstrap.py         # Swarm init and label bootstrap
+│   ├── change_detection.py  # Watchdog reloader for configs
+│   ├── deploy_node_exporter.py  # [ ⚠️ ] — Docker socket deployment (heavier, nearing lib material)
+│   ├── gc_prune.py           # Local prune manager
+│   ├── label_sync.py         # Thin orchestration (calls lib.sync.label_manager)
+│   ├── log_rotate.py         # Local logrotate cron runner
+│   ├── rebalance.py          # Thin orchestrator (calls lib.metrics/rebalance_decision)
+│   └── static_labels.py      # Static node labeling runner
+│
+├── lib/           # 📚 Real "brains" — service-specific helpers, metrics, node logic
+│   ├── common/
+│   ├── sync/
+│   ├── metrics/
+│   ├── bootstrap/
+│   └── rebalance/
+│
+├── core/          # 🏛️ Project-wide constants, config loader, Docker API wrappers
+│
+├── config/        # ⚙️ YAML config files mounted into container
+│
+├── scripts/       # 🛠️ External system scripts (bootstrap.sh, trigger-redeploys.sh)
+│
+└── utils/         # 🧹 Healthcheck and small pure utilities
