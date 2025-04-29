@@ -103,20 +103,38 @@ services:
 
 ## Environment Variables
 
-| Variable                          | Default                                        | Purpose |
-|:----------------------------------|:------------------------------------------------|:--------|
-| STACK_NAME                        | `swarm-dev`                                    | Prefix for services and labels |
-| DEPENDENCIES_FILE                 | `/etc/swarm-orchestration/dependencies.yml`    | Dependency mappings |
-| REBALANCE_CONFIG                  | `/etc/swarm-orchestration/rebalance_config.yml`| Rebalancing rules |
-| NODES_FILE                        | `/etc/swarm-orchestration/nodes.yml`           | Static node labels |
-| DEBUG                             | `false`                                        | Enable debug output |
-| DRY_RUN                           | `false`                                        | Simulate actions without applying changes |
-| RUN_ONCE                          | `false`                                        | Perform a single full orchestration cycle |
-| EVENT_MODE                        | `false`                                        | Event-driven service monitoring (future) |
-| POLLING_MODE                      | `true`                                         | Interval-driven service monitoring |
-| MOD_MANAGER_CONFIG                | `/etc/mods/config.json`                        | Mod download configuration file |
-| MOD_MANAGER_DEST                  | `/mnt/mods`                                    | Modcache destination directory |
-| MOD_MANAGER_REFRESH_INTERVAL_MINUTES | `6`                                          | Mod download refresh interval |
+## Environment Variables
+
+| Variable                            | Default                                         | Purpose |
+|:------------------------------------|:------------------------------------------------|:--------|
+| TZ                                  | (none)                                          | Container timezone |
+| STACK_NAME                          | `swarm-dev`                                     | Prefix for services and labels |
+| BOOTSTRAP_MODE                      | `watch`                                         | Bootstrap behavior: loop, once, or watch |
+| LOOP_INTERVAL                       | `300`                                           | Bootstrap mode loop interval (seconds) |
+| PRUNE_UNKNOWN_LABELS                | `false`                                         | Whether to remove unexpected labels during bootstrap |
+| RELABEL_TIME                        | `60`                                            | Label sync polling interval (seconds) |
+| EVENT_MODE                          | `true`                                          | Enable Docker event-based monitoring |
+| POLLING_MODE                        | `true`                                          | Enable interval-based monitoring |
+| RESTART_DEPENDENTS                  | `true`                                          | Restart dependents when anchor fails |
+| REBALANCE_MONITOR_INTERVAL_SECONDS  | `30`                                            | Interval to check memory metrics (seconds) |
+| REBALANCE_GLOBAL_COOLDOWN_MINUTES   | `10`                                            | Global cooldown before rebalancing again (minutes) |
+| REBALANCE_GLOBAL_MEM_THRESHOLD_PERCENT | `85`                                        | Trigger rebalance when node memory % exceeds this threshold |
+| GC_CRON                             | `0 */4 * * *`                                   | Cron expression for GC runs (default every 4 hours) |
+| GC_FORCE_IMAGE_REMOVAL              | `1`                                             | Force remove images when cleaning up |
+| GC_MINIMUM_IMAGES_TO_SAVE           | `3`                                             | Number of images to retain before GC |
+| GC_FORCE_CONTAINER_REMOVAL          | `1`                                             | Force remove exited containers |
+| GC_GRACE_PERIOD_SECONDS             | `10800`                                         | Time before cleaning exited containers (seconds) |
+| GC_DRY_RUN                          | `0`                                             | Run GC without making changes |
+| GC_CLEAN_UP_VOLUMES                 | `1`                                             | Whether to remove orphaned volumes during GC |
+| MOD_MANAGER_DEST                    | `/modcache`                                     | Modcache destination folder |
+| MOD_MANAGER_REFRESH_INTERVAL_MINUTES | `720`                                          | Interval to refresh mod downloads (minutes) |
+| COMMAND_FILE                        | `/mnt/commands/swarm-orchestration.command.yml` | Path to dynamic command file |
+| NODES_FILE                          | `/etc/swarm-orchestration/nodes.yml`            | Static node metadata for bootstrap and labeling |
+| DEPENDENCIES_FILE                   | `/etc/swarm-orchestration/dependencies.yml`     | Anchor/dependent mappings |
+| LOG_TO_FILE                         | `false`                                         | Enable logging to file inside container |
+| DRY_RUN                             | `false`                                         | Simulate all actions without actually applying changes |
+| RUN_ONCE                            | `false`                                         | Only run one cycle instead of continuous operation |
+| DEBUG                               | `true`                                          | Enable verbose debug logging |
 
 ---
 
