@@ -1,6 +1,6 @@
 # Orcastra: Swarm Orchestration Container
 
-<img src="https://raw.githubusercontent.com/princinv/orcastra/main/assets/orcastra_banner.png" alt="Orcastra Banner" width="100%" />
+[![Orcastra Banner](https://raw.githubusercontent.com/princinv/orcastra/main/assets/orcastra_banner.png)](https://github.com/princinv/orcastra)
 
 ---
 
@@ -31,38 +31,67 @@ It extends Docker Swarm into a fully autonomous, dependency-aware, resource-driv
 ## Directory Overview
 
 ```bash
-src/
-├── cli/                  # CLI entrypoints
-│   └── entrypoint.py
-├── commands/              # Dynamic command file triggers
-│   └── swarm-orch.command.yml
-├── core/                  # Global configuration and persistent state
-│   ├── config_loader.py
-│   ├── config.py
-│   ├── constants.py
-│   ├── docker_client.py
-│   ├── retry_state.py
-│   └── state.py
-├── lib/                   # Logical modules
-│   ├── bootstrap/
-│   ├── common/
-│   ├── metrics/
-│   ├── rebalance/
-│   └── sync/
-├── runner/                # Lightweight orchestrators
-│   ├── autoheal.py
-│   ├── bootstrap.py
-│   ├── change_detection.py
-│   ├── deploy_node_exporter.py
-│   ├── gc_prune.py
-│   ├── label_sync.py
-│   ├── log_rotate.py
-│   ├── mod_manager.py
-│   ├── rebalance.py
-│   └── static_labels.py
-├── config/                # Mounted YAML configurations
-├── utils/                 # Healthchecks and simple utilities
-└── logs/                  # Internal container logs
+.
+├── assets
+├── config
+│   ├── dependencies.yml
+│   ├── logrotate.d
+│   │   └── default.conf
+│   ├── node_exporter_deploy.yml
+│   ├── nodes.yml
+│   └── rebalance_config.yml
+├── Dockerfile
+├── docs
+│   ├── LICENSE
+│   ├── notes.md
+│   └── README.md
+├── scripts
+│   └── trigger-bootstrap.sh
+└── src
+    ├── cli
+    │   └── entrypoint.py
+    ├── commands
+    │   └── swarm-orch.command.yml
+    ├── core
+    │   ├── config_loader.py
+    │   ├── config.py
+    │   ├── constants.py
+    │   ├── docker_client.py
+    │   ├── retry_state.py
+    │   └── state.py
+    ├── lib
+    │   ├── bootstrap
+    │   │   ├── bootstrap_labels.py
+    │   │   └── bootstrap_tasks.py
+    │   ├── common
+    │   │   ├── docker_helpers.py
+    │   │   ├── service_helpers.py
+    │   │   ├── ssh_helpers.py
+    │   │   └── task_diagnostics.py
+    │   ├── metrics
+    │   │   ├── metrics_helpers.py
+    │   │   └── metrics_scraper.py
+    │   ├── mods
+    │   │   └── mod_manager.py
+    │   ├── rebalance
+    │   │   └── rebalance_decision.py
+    │   └── sync
+    │       ├── label_manager.py
+    │       └── label_utils.py
+    ├── main.py
+    ├── requirements.txt
+    ├── runner
+    │   ├── autoheal.py
+    │   ├── bootstrap.py
+    │   ├── change_detection.py
+    │   ├── deploy_node_exporter.py
+    │   ├── gc_prune.py
+    │   ├── label_sync.py
+    │   ├── log_rotate.py
+    │   ├── rebalance.py
+    │   └── static_labels.py
+    └── utils
+        └── healthcheck.py
 ```
 
 ---
