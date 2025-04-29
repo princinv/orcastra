@@ -1,24 +1,6 @@
-docker push ghcr.io/princinv/orcastra:v0.3.0
-
-The push refers to repository [ghcr.io/princinv/orcastra]
-19f971e2d8cd: Layer already exists 
-6ee5ceb34fd8: Layer already exists 
-8cf169dff6b2: Layer already exists 
-5a47714961b6: Layer already exists 
-00a9c11f9c0f: Layer already exists 
-b22b26e46bff: Layer already exists 
-57eaabbf7ad6: Layer already exists 
-6b63e624a7d4: Retrying in 7 seconds 
-8f55e30a1501: Layer already exists 
-84a86f614ade: Layer already exists 
-9aeba49f9ae6: Layer already exists 
-d50d320ea099: Layer already exists 
-6c4c763d22d0: Layer already exists 
-
 # Orcastra: Swarm Orchestration Container
 
 <img src="https://raw.githubusercontent.com/princinv/orcastra/main/assets/orcastra_banner.png" alt="Orcastra Banner" width="100%" />
-
 
 ---
 
