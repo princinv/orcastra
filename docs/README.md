@@ -17,7 +17,7 @@ d50d320ea099: Layer already exists
 
 # Orcastra: Swarm Orchestration Container
 
-[![Orcastra Banner](https://raw.githubusercontent.com/princinv/swarm-orch/main/assets/orcastra_banner.png)](https://github.com/princinv/swarm-orch)
+[![Orcastra Banner](https://raw.githubusercontent.com/princinv/orcastra/main/assets/orcastra_banner.png)](https://github.com/princinv/orcastra)
 
 
 ---
