@@ -21,12 +21,13 @@ import uvicorn
 
 from core.config import DEBUG
 from core.docker_client import is_leader_node
-from runner import label_sync, label_manager, rebalance, bootstrap
+from runner import label_sync, rebalance, bootstrap
+from lib.sync import label_manager
+from lib.rebalance import rebalance_decision
 from runner.static_labels import run as run_static_label_sync
 from runner.change_detection import run as start_file_watcher
 from runner.deploy_node_exporter import deploy as deploy_node_exporter
 from runner import gc_prune
-from runner import rebalance_decision
 from runner import autoheal
 from runner import log_rotate
 
@@ -102,7 +103,7 @@ swarm_orch_leader {1 if is_leader_node() else 0}
     )
 
 def start_api():
-    uvicorn.run(api, host="0.0.0.0", port=8080)
+    uvicorn.run(api, host="0.0.0.0", port=6060)
 
 # --- Start background threads ---
 Thread(target=start_api, daemon=True).start()

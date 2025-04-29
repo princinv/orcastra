@@ -13,3 +13,10 @@ try:
 except Exception:
     client = None
     DOCKER_SDK_VERSION = (0, 0, 0)  # fallback if docker SDK is not usable
+
+def is_leader_node():
+    try:
+        info = client.info()
+        return info.get("Swarm", {}).get("ControlAvailable", False)
+    except Exception:
+        return False
