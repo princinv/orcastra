@@ -2,30 +2,11 @@
 """
 rebalance_decision.py
 - Encapsulates the decision logic for memory-aware Docker Swarm service rebalancing.
-- Services are moved automatically to better nodes if sustained memory pressure is detected.
-- Supports preferred node labels and dynamic buffer-based rebalance evaluation.
-
-Functions:
-  - should_rebalance(): Determines if a service should migrate to another node.
-  - run_rebalance_loop(): Continuously monitors metrics and executes rebalance actions.
-
-Config:
-  - Reads configuration from REBALANCE_CONFIG_PATH (rebalance_config.yml).
-  - Dependencies list can be specified inside rebalance_config.yml via 'dependencies_file'.
-  - Memory metrics are collected via Node Exporter endpoints.
-
-Usage:
-  - Can be triggered via main Orcastra supervisor.
-  - Designed to survive Swarm leader changes and resilient against metric scraping failures.
-
-Notes:
-  - Rebalance is triggered only if sustained imbalance exceeds configured thresholds.
-  - Services can opt-out of rebalancing via label "orchestration.rebalance=false".
 """
 
 from datetime import datetime, timedelta
 import asyncio
-import logging
+from loguru import logger
 from time import time
 
 from core.constants import DEFAULT_REBALANCE_BUFFER_GB
@@ -60,11 +41,11 @@ def should_rebalance(service, current_node, free_mem_by_node, config, state, con
             predicted_target_mem = preferred_mem - total_mem
 
             if (predicted_target_mem - predicted_source_mem) >= rebalance_buffer:
-                logging.info(f"[rebalance] {service} should move to preferred node {preferred_node} (currently on {current_node})")
+                logger.info(f"[rebalance] {service} should move to preferred node {preferred_node} (currently on {current_node})")
                 return True, preferred_node
 
     better_nodes = [n for n, mem in free_mem_by_node.items() if mem - free_mem_by_node[current_node] >= threshold]
-    if len(better_nodes) < 1:
+    if not better_nodes:
         state.pop(service, None)
         return False, None
 
@@ -89,7 +70,7 @@ def should_rebalance(service, current_node, free_mem_by_node, config, state, con
         if (predicted_target_mem - predicted_source_mem) >= rebalance_buffer:
             return True, best
         else:
-            logging.info(f"[rebalance] Skipping move for {service}: improvement less than {rebalance_buffer} GB after accounting for dependents.")
+            logger.info(f"[rebalance] Skipping move for {service}: improvement less than {rebalance_buffer} GB after accounting for dependents.")
             return False, None
 
     return False, None
@@ -112,7 +93,7 @@ async def run_rebalance_loop():
     exporters = config.get('node_exporters', {})
 
     while True:
-        logging.info("[rebalance] Checking memory stats for rebalancing decisions...")
+        logger.info("[rebalance] Checking memory stats for rebalancing decisions...")
         start_time = time()
 
         free_mem_by_node = {}
@@ -122,7 +103,7 @@ async def run_rebalance_loop():
                 free_mem_by_node[node] = mem
 
         if not free_mem_by_node:
-            logging.warning("[rebalance] No memory data available. Skipping.")
+            logger.warning("[rebalance] No memory data available. Skipping.")
             await asyncio.sleep(loop_interval)
             continue
 
@@ -135,7 +116,7 @@ async def run_rebalance_loop():
                 labels = svc_obj.attrs['Spec'].get('Labels', {})
 
                 if labels.get("orchestration.rebalance", "true").lower() != "true":
-                    logging.debug(f"[rebalance] Skipping {service} due to orchestration.rebalance=false")
+                    logger.debug(f"[rebalance] Skipping {service} due to orchestration.rebalance=false")
                     continue
 
                 preferred_node = labels.get("orchestration.preferred.node")
@@ -151,7 +132,7 @@ async def run_rebalance_loop():
                     continue
 
                 if preferred_node and current_node != preferred_node:
-                    logging.debug(f"[rebalance] {service} prefers node {preferred_node}. Currently on {current_node}.")
+                    logger.debug(f"[rebalance] {service} prefers node {preferred_node}. Currently on {current_node}.")
 
                 rebalance_attempts_total += 1
 
@@ -160,18 +141,16 @@ async def run_rebalance_loop():
                 )
 
                 if should_move and target_node:
-                    logging.warning(f"[rebalance] Triggering rebalance of {service} to {target_node}")
+                    logger.warning(f"[rebalance] Triggering rebalance of {service} to {target_node}")
                     svc_obj.update(force_update=True)
                     rebalance_success_total += 1
                     state[service]['last_moved'] = datetime.utcnow().isoformat()
                     state[service]['moved_to'] = target_node
 
             except Exception as e:
-                logging.error(f"[rebalance] Failed to evaluate rebalance for {service}: {e}")
+                logger.error(f"[rebalance] Failed to evaluate rebalance for {service}: {e}")
                 rebalance_failures_total += 1
 
-        gc_duration = time() - start_time
-        rebalance_last_duration_seconds = gc_duration
-
+        rebalance_last_duration_seconds = time() - start_time
         save_state(state)
         await asyncio.sleep(loop_interval)

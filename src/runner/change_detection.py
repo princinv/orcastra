@@ -7,7 +7,7 @@ change_detection.py
 """
 
 import time
-import logging
+from loguru import logger
 from pathlib import Path
 from threading import Lock
 from watchdog.observers import Observer
@@ -22,7 +22,7 @@ CONFIG_DIR = Path("/etc/swarm-orchestration")
 
 WATCHED_FILES = {
     CONFIG_DIR / "swarm.yml": lambda: (sync_static_labels(), sync_dynamic_labels()),
-    Path(REBALANCE_CONFIG_PATH): lambda: logging.info("[watcher] Rebalance config changed (hook not implemented)")
+    Path(REBALANCE_CONFIG_PATH): lambda: logger.info("[watcher] Rebalance config changed (hook not implemented)")
 }
 
 debounce_tracker = {}
@@ -38,22 +38,22 @@ class ConfigChangeHandler(FileSystemEventHandler):
         with debounce_lock:
             last_trigger = debounce_tracker.get(path, 0)
             if now - last_trigger < DEBOUNCE_TIME:
-                logging.debug(f"[watcher] Debounced {path.name} (last trigger {now - last_trigger:.2f}s ago)")
+                logger.debug(f"[watcher] Debounced {path.name} (last trigger {now - last_trigger:.2f}s ago)")
                 return
             debounce_tracker[path] = now
 
-        logging.info(f"[watcher] Detected change in {path.name}, triggering handler.")
+        logger.info(f"[watcher] Detected change in {path.name}, triggering handler.")
         try:
             WATCHED_FILES[path]()
         except Exception as e:
-            logging.error(f"[watcher] Failed to handle {path.name}: {e}")
+            logger.error(f"[watcher] Failed to handle {path.name}: {e}")
 
 def run():
     observer = Observer()
     handler = ConfigChangeHandler()
     observer.schedule(handler, str(CONFIG_DIR), recursive=False)
     observer.start()
-    logging.info("[watcher] Watching YAML files for changes...")
+    logger.info("[watcher] Watching YAML files for changes...")
     try:
         while True:
             time.sleep(1)

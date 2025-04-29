@@ -4,3 +4,6 @@ requests>=2.31.0
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 watchdog>=3.0.0
+loguru>=0.7.3
+tenacity>=8.2.3
+sentry-sdk>=1.39.1

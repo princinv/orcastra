@@ -10,12 +10,12 @@ deploy_node_exporter.py
 import os
 import shlex
 import subprocess
-import logging
+from loguru import logger
 
 from core.config_loader import load_yaml
+from tenacity import retry, stop_after_attempt, wait_fixed
 
-CONFIG_PATH = "/src/system_services/node_exporter.yml"
-
+CONFIG_PATH = "/etc/swarm-orchestration/node_exporter_deploy.yml"  # <-- FIXED
 
 def build_service_command(cfg):
     cmd = ["docker", "service", "create"]
@@ -88,18 +88,16 @@ def build_service_command(cfg):
     hc = cfg.get("healthcheck", {})
     if hc:
         test_cmd = hc.get('test')
-    hc = cfg.get("healthcheck", {})
-    if hc:
-        test_cmd = hc.get('test')
         if isinstance(test_cmd, list) and len(test_cmd) >= 2:
             if test_cmd[0] == "CMD-SHELL":
-                cmd += ["--health-cmd", test_cmd[1]]  # shell command only
+                cmd += ["--health-cmd", test_cmd[1]]
             else:
-                cmd += ["--health-cmd", test_cmd[1]]  # non-shell command, but still command part
+                cmd += ["--health-cmd", test_cmd[1]]
         elif isinstance(test_cmd, str):
             cmd += ["--health-cmd", test_cmd]
         else:
-            logging.warning("[deploy] Skipping healthcheck: invalid test command structure.")
+            logger.warning("[deploy] Skipping healthcheck: invalid test command structure.")
+
         cmd += ["--health-interval", hc.get("interval", "30s")]
         cmd += ["--health-timeout", hc.get("timeout", "30s")]
         cmd += ["--health-retries", str(hc.get("retries", 3))]
@@ -111,32 +109,31 @@ def build_service_command(cfg):
 
     return cmd
 
-
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def deploy():
     cfg = load_yaml(CONFIG_PATH)
     if not cfg:
-        logging.error("[node_exporter] Configuration missing or invalid.")
+        logger.error("[node_exporter] Configuration missing or invalid.")
         return
 
-    # Check if service already exists
     inspect_cmd = ["docker", "service", "inspect", "node_exporter"]
     result = subprocess.run(inspect_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     if result.returncode == 0:
-        logging.info("[node_exporter] Service exists, forcing update...")
+        logger.info("[node_exporter] Service exists, forcing update...")
         try:
             subprocess.run(["docker", "service", "update", "--force", "node_exporter"], check=True)
-            logging.info("[node_exporter] Service update successful.")
+            logger.info("[node_exporter] Service update successful.")
         except subprocess.CalledProcessError as e:
-            logging.error(f"[node_exporter] Update failed: {e}")
+            logger.error(f"[node_exporter] Update failed: {e}")
     else:
-        logging.info("[node_exporter] Service not found. Creating...")
+        logger.info("[node_exporter] Service not found. Creating...")
         cmd = build_service_command(cfg)
         try:
             subprocess.run(cmd, check=True)
-            logging.info("[node_exporter] Service created successfully.")
+            logger.info("[node_exporter] Service created successfully.")
         except subprocess.CalledProcessError as e:
-            logging.error(f"[node_exporter] Service creation failed: {e}")
+            logger.error(f"[node_exporter] Service creation failed: {e}")
 
 
 if __name__ == "__main__":

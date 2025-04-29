@@ -5,9 +5,13 @@ static_label_utils.py
 - These are persistent, non-anchor labels (e.g., zfs, ubuntu, proxmox).
 - Labels are applied using the Docker SDK and only removed if explicitly absent from config.
 """
-import logging
+from loguru import logger
 
+from tenacity import retry, stop_after_attempt, wait_fixed
+
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def sync_static_node_labels(client, nodes_config, dry_run=False):
+
     managed_labels_set = set()  # track all labels we manage system-wide
     for node_labels in nodes_config.values():
         managed_labels_set.update(node_labels.get("labels", []))
@@ -37,21 +41,21 @@ def sync_static_node_labels(client, nodes_config, dry_run=False):
 
         if current != updated_labels:
             if dry_run:
-                logging.info(f"[static_label] (Dry Run) Would update {hostname} → {updated_labels}")
+                logger.info(f"[static_label] (Dry Run) Would update {hostname} → {updated_labels}")
                 continue  # <-- inside loop, now valid
 
+        if current != updated_labels:
+            if dry_run:
+                logger.info(f"[static_label] (Dry Run) Would update {hostname} → {updated_labels}")
+                continue
+
             try:
-                node_spec = {
-                    "Availability": node.attrs["Spec"]["Availability"],
-                    "Labels": updated_labels,
-                }
                 version = node.attrs["Version"]["Index"]
-                client.api.update_node(node.id, version=version, **node_spec)
-                logging.info(f"[static_label] Synced labels on {hostname}: {updated_labels}")
+                client.api.update_node(node.id, version=version, labels=updated_labels)
+                logger.info(f"[static_label] Synced labels on {hostname}: {updated_labels}")
             except Exception as e:
-                logging.error(f"[static_label] Failed to update {hostname}: {e}")
+                logger.error(f"[static_label] Failed to update {hostname}: {e}")
 
-    logging.info(f"[static_label] Labeled nodes: {found}")
+    logger.info(f"[static_label] Labeled nodes: {found}")
     if missing:
-        logging.info(f"[static_label] Nodes not found in Swarm (may be offline, ignored): {missing}")
-
+        logger.info(f"[static_label] Nodes not found in Swarm (may be offline, ignored): {missing}")

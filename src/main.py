@@ -11,9 +11,9 @@ main.py
     - Node Exporter deployment at startup
     - Mod Manager loop for automatic mod downloads
 """
-
 import asyncio
-import logging
+import os
+import sys
 from threading import Thread
 
 from fastapi import FastAPI
@@ -33,10 +33,25 @@ from runner import autoheal
 from runner import log_rotate
 from lib.mods import mod_manager  # <-- NEW
 
+from loguru import logger  # <-- NEW
+
+# OPTIONAL: Only if you have a Sentry DSN
+import sentry_sdk
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=1.0,
+        send_default_pii=True  # optional: includes user info if available
+    )
+
 # --- Logging Setup ---
-logging.basicConfig(
-    level=logging.DEBUG if DEBUG else logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+logger.remove()
+logger.add(
+    sys.stderr,
+    level="DEBUG" if DEBUG else "INFO",
+    colorize=True,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
 )
 
 # --- FastAPI Server ---
@@ -132,14 +147,14 @@ async def main():
         tasks = []
 
         if is_leader_node():
-            logging.info("[swarm-orch] Leadership status: LEADER — running global orchestration tasks.")
+            logger.info("[swarm-orch] Leadership status: LEADER — running global orchestration tasks.")
             tasks += [
                 label_sync.run(),
                 bootstrap.run(),
                 rebalance.run(),
             ]
         else:
-            logging.info("[swarm-orch] Leadership status: FOLLOWER — skipping global orchestration tasks.")
+            logger.info("[swarm-orch] Leadership status: FOLLOWER — skipping global orchestration tasks.")
 
         # Always-run safe tasks
         tasks += [

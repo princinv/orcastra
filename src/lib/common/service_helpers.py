@@ -6,11 +6,13 @@ service_helpers.py
 - Handles retry tracking when updates fail.
 """
 
-import logging
-import time
 import subprocess
+import time
+from loguru import logger
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from docker.errors import APIError
 from core.retry_state import retry_state
+
 
 def get_service_node(client, service_name, wait_timeout=5):
     """
@@ -36,38 +38,44 @@ def get_service_node(client, service_name, wait_timeout=5):
                 node_id = task.get("NodeID")
 
                 if state == "running" and node_id:
-                    logging.info(f"📍 {service_name} is running on node {node_id}")
+                    logger.info(f"📍 {service_name} is running on node {node_id}")
                     return node_id
                 if state == "starting" and node_id:
-                    logging.info(f"⏳ {service_name} is starting on node {node_id}, will retry later")
+                    logger.info(f"⏳ {service_name} is starting on node {node_id}, will retry later")
 
             time.sleep(1)
 
         for task in tasks:
-            logging.debug(
+            logger.debug(
                 f"🧪 Task for {service_name}: ID={task.get('ID')} | "
                 f"State={task.get('Status', {}).get('State')} | "
                 f"NodeID={task.get('NodeID')}"
             )
-        logging.warning(f"❌ No running task with valid NodeID found for {service_name}")
+        logger.warning(f"❌ No running task with valid NodeID found for {service_name}")
 
     except APIError as e:
-        logging.warning(f"⚠️ Could not inspect service: {service_name} — {e}")
+        logger.warning(f"⚠️ Could not inspect service: {service_name} — {e}")
     except Exception as e:
-        logging.error(f"🔥 Unexpected error checking node for {service_name}: {e}")
+        logger.error(f"🔥 Unexpected error checking node for {service_name}: {e}")
     return None
 
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(APIError)
+)
 def force_update_service(client, service_name):
     """
-    Force a rolling update of a Swarm service via Docker SDK or CLI.
-    Handles retry tracking and CLI fallback.
+    Force-update a Docker service using SDK or fallback to CLI.
 
     Args:
         client: Docker SDK client
-        service_name (str): The name of the service to update
+        service_name (str): Full service name (e.g. swarm-dev_gitea)
 
     Returns:
-        bool: True on success, False on failure
+        bool: True if update succeeded, False otherwise
     """
     try:
         service = client.services.get(service_name)
@@ -77,17 +85,18 @@ def force_update_service(client, service_name):
                 labels=service.attrs['Spec'].get('Labels', {}),
                 force_update=True
             )
-            logging.info(f"🔁 Forced update of service: {service_name} (SDK)")
-        except Exception as te:
-            logging.warning(f"⚠️ SDK update failed for {service_name}: {te}, falling back to CLI")
+            logger.info(f"🔁 Forced update of service: {service_name} (SDK)")
+        except Exception as sdk_error:
+            logger.warning(f"⚠️ SDK update failed for {service_name}: {sdk_error}, falling back to CLI")
             subprocess.run(["docker", "service", "update", "--force", service_name], check=True)
-            logging.info(f"🔁 Forced update of service: {service_name} (CLI)")
+            logger.info(f"🔁 Forced update of service: {service_name} (CLI fallback)")
 
         retry_state.pop(service_name, None)
         return True
 
     except Exception as e:
-        logging.error(f"❌ Failed to update service '{service_name}': {e}")
+        logger.error(f"❌ Failed to update service '{service_name}': {e}")
+        retry_state.setdefault(service_name, {"failures": 0, "last_attempt": time.time()})
         retry_state[service_name]["failures"] += 1
         retry_state[service_name]["last_attempt"] = time.time()
         return False
