@@ -21,7 +21,11 @@ COPY src/requirements.txt /src/requirements.txt
 RUN pip install --no-cache-dir -r /src/requirements.txt
 
 # --- Create runtime directories ---
-RUN mkdir -p /etc/swarm-orchestration /var/lib/swarm-orchestration /var/log/swarm-orchestration
+RUN mkdir -p \
+    /etc/swarm-orchestration \
+    /var/lib/swarm-orchestration \
+    /var/log/swarm-orchestration \
+    /modcache   # <-- 🛠 CREATE /modcache
 
 # --- Copy project structure ---
 COPY src/ /src/
