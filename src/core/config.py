@@ -20,6 +20,6 @@ LOG_TO_FILE = os.getenv("LOG_TO_FILE", "false").lower() == "true"
 LOG_LEVEL = logging.DEBUG if DEBUG else logging.INFO
 
 # --- Config Paths ---
-DEPENDENCIES_FILE = os.getenv("DEPENDENCIES_FILE", "/etc/swarm-orchestration/dependencies.yml")
+SWARM_FILE = os.getenv("SWARM_FILE", "/etc/swarm-orchestration/swarm.yml")
 REBALANCE_CONFIG_PATH = os.getenv("REBALANCE_CONFIG", "/etc/swarm-orchestration/rebalance_config.yml")
 REBALANCE_STATE_PATH = "/var/lib/swarm-orchestration/rebalance_state.json"

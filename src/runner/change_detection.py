@@ -15,14 +15,13 @@ from watchdog.events import FileSystemEventHandler
 
 from runner.static_labels import run as sync_static_labels
 from lib.sync.label_manager import main_loop as sync_dynamic_labels
-from core.config import DEPENDENCIES_FILE, REBALANCE_CONFIG_PATH
+from core.config import SWARM_FILE, REBALANCE_CONFIG_PATH
 from core.constants import DEBOUNCE_TIME
 
 CONFIG_DIR = Path("/etc/swarm-orchestration")
 
 WATCHED_FILES = {
-    CONFIG_DIR / "nodes.yml": sync_static_labels,
-    CONFIG_DIR / "dependencies.yml": sync_dynamic_labels,
+    CONFIG_DIR / "swarm.yml": lambda: (sync_static_labels(), sync_dynamic_labels()),
     Path(REBALANCE_CONFIG_PATH): lambda: logging.info("[watcher] Rebalance config changed (hook not implemented)")
 }
 

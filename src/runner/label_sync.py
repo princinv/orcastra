@@ -7,18 +7,21 @@ label_sync.py
 """
 
 import asyncio
-from core.config import DEPENDENCIES_FILE
-from core.config_loader import preview_yaml
+from core.config_loader import load_yaml, preview_yaml
 from lib.sync import label_manager
 
+SWARM_FILE = "/etc/swarm-orchestration/swarm.yml"
+
 # Preview loaded config for clarity at startup
-preview_yaml(DEPENDENCIES_FILE, name="dependencies.yml")
+preview_yaml(SWARM_FILE, name="swarm.yml")
 
 async def run():
     """
     Run the label manager orchestration loop asynchronously.
     """
-    await label_manager.run()
+    config = load_yaml(SWARM_FILE)
+    dependencies = config.get("dependencies", {})
+    await label_manager.run(dependencies)
 
 if __name__ == "__main__":
     asyncio.run(run())
