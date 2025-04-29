@@ -1,179 +1,264 @@
-# 🐳 swarm-orchestration
+docker push ghcr.io/princinv/orcastra:v0.3.0
 
----
+The push refers to repository [ghcr.io/princinv/orcastra]
+19f971e2d8cd: Layer already exists 
+6ee5ceb34fd8: Layer already exists 
+8cf169dff6b2: Layer already exists 
+5a47714961b6: Layer already exists 
+00a9c11f9c0f: Layer already exists 
+b22b26e46bff: Layer already exists 
+57eaabbf7ad6: Layer already exists 
+6b63e624a7d4: Retrying in 7 seconds 
+8f55e30a1501: Layer already exists 
+84a86f614ade: Layer already exists 
+9aeba49f9ae6: Layer already exists 
+d50d320ea099: Layer already exists 
+6c4c763d22d0: Layer already exists 
 
-## ORCHA
 
----
+🐙 ORASTRA: Swarm Orchestration Container
+<img src="https://raw.githubusercontent.com/princinv/swarm-orch/main/docs/banner.png" alt="Orchestration Banner" width="100%" />
+🛠️ What is ORASTRA?
+A modular container designed for advanced Docker Swarm orchestration — ensuring service co-location, dynamic failover recovery, memory-aware rebalancing, continuous Swarm label reconciliation, and mod download management.
 
-A modular container designed for **orchestrating Docker Swarm service placement**, ensuring **co-location of dependent services**, **automated failover**, and **memory-aware rebalancing** based on real-world resource metrics (via `node_exporter`).
+ORASTRA empowers Docker Swarm to behave like a true orchestrator — node-aware, dependency-respecting, self-healing, and dynamic.
 
-## 🎯 Purpose
+✨ Core Features
 
-Docker Swarm alone doesn’t guarantee that dependent services (e.g., an app and its database) will be scheduled on the same node. This container provides:
+Feature	Description
+🔗 Anchor-following	Services automatically follow their "anchor" service (e.g., an app follows its database) via dynamic node labeling.
+🔁 Auto-restarts	If placement constraints fail, services are auto-restarted with forced updates and cooldowns.
+🏷️ Node Label Management	Nodes are labeled in real time to reflect service placement, and static labels are synchronized.
+📊 Memory-aware Rebalancing	Services are moved between nodes based on real memory availability via Prometheus node_exporter.
+⏱️ Event and Polling Modes	Supports both event-based and interval-based monitoring of Docker services.
+⚙️ Command YAML Interface	Define actions like bootstrap, sync, restart, pause via easy YAML commands (swarm-orch.command.yml).
+🛠️ Swarm Bootstrap & Self-Healing	Automatically initializes Swarm, promotes nodes, and re-joins dropped nodes.
+🧹 Autoheal, GC, Logrotate	Optional side-utilities keep your Swarm clean and responsive.
+🎮 Mod Manager	Periodically downloads mods based on a config file (modcache system) and updates them automatically.
+📁 Directory Overview
+bash
+Copy
+Edit
+src/
+├── cli/                  # Entrypoints and CLI runners
+│   └── entrypoint.py
+├── commands/              # Dynamic command triggers
+│   └── swarm-orch.command.yml
+├── core/                  # Global configuration and state handling
+│   ├── config_loader.py
+│   ├── config.py
+│   ├── constants.py
+│   ├── docker_client.py
+│   ├── retry_state.py
+│   └── state.py
+├── lib/                   # Modular logic layers
+│   ├── bootstrap/         # Swarm join, promote, label tasks
+│   ├── common/            # Docker CLI helpers, task inspection
+│   ├── sync/              # Labeling logic
+│   ├── metrics/           # Memory scraping helpers
+│   └── rebalance/         # Rebalance decisions
+├── runner/                # Main orchestrators (label sync, rebalance, bootstrap, modmanager, etc.)
+├── utils/                 # Healthcheck and small utilities
+├── config/                # Mounted runtime YAMLs (dependencies, nodes, rebalance config)
+└── logs/                  # Service activity logs
+🚀 Main Orchestrators
 
-- 🔗 **Anchor-following** — ensures dependent services follow their "anchor" (usually a DB).
-- 🔁 **Auto-restarts** — force-updates services that fail to meet placement constraints.
-- 📦 **Label-based orchestration** — updates node labels to reflect current anchor locations.
-- 📉 **Resource-aware rebalancing** — migrates services to underutilized nodes using Prometheus metrics.
-- ⬆️ **Event and Polling modes** — runs continuously or triggers on container events.
-- ⚙️ **Command YAML interface** — easily trigger reconciliations, restarts, pauses, and more.
-
----
-
-## 🧱 Directory Structure
-
-```bash
-swarm-orch/
-├── Dockerfile
-├── requirements.txt
-├── src/                        # Main entrypoint + orchestrator threads
-│   ├── bootstrap_swarm.py     # Joins/labels all swarm nodes, ensures correct Swarm state
-│   ├── label_sync.py          # Anchor-dependency logic, placement decisions, and retries
-│   ├── rebalance.py           # Memory-aware service rebalancer (uses node_exporter)
-│   └── supervisor.py          # Launches all modules in parallel
-├── core/                      # Global helpers and state
-│   ├── config.py              # ENV loader and default constants
-│   ├── config_loader.py       # Shared YAML config loading
-│   ├── constants.py           # Shared string constants (future use)
-│   ├── docker_client.py       # Docker SDK setup
-│   ├── retry_state.py         # Retry tracking for placement enforcement
-│   └── state.py               # JSON state persistence (used by rebalance)
-├── lib/                       # Modular logic
-│   ├── bootstrap_labels.py    # Adds/removes swarm labels based on config
-│   ├── bootstrap_tasks.py     # Swarm join/promotion/leader logic
-│   ├── dependency_loader.py   # Parses dependencies.yml (anchor → dependents)
-│   ├── docker_helpers.py      # Subprocess calls for service/node info
-│   ├── labels.py              # High-level label actions used by orchestrators
-│   ├── metrics_scraper.py     # Pulls metrics from node_exporter
-│   ├── node_labels.py         # Determines where services should run
-│   ├── rebalance_decision.py  # Logic to determine rebalance eligibility
-│   ├── retries.py             # Retry helper used across modules
-│   ├── service_update.py      # Performs rolling updates using Docker API
-│   └── ssh_helpers.py         # Runs SSH commands (used in bootstrap)
-├── config/                    # Runtime configuration
-│   ├── dependencies.yml       # Anchor ↔ dependent mappings
-│   ├── nodes.yml              # Node metadata (hostnames, IPs, labels)
-│   └── rebalance_config.yml   # Per-service and global rebalance settings
-└── logs/
-    └── swarm-labels.log
-```
-
----
-
-## ⚙️ Features & Modes
-
-### Anchor/Dependent Sync (`label_sync.py`)
-
-- Marks the node running the anchor with a label like `gitea_db=true`.
-- Forces a rolling update on dependents if not co-located or failed to start.
-- Skips restarts if within retry cooldown.
-
-### Bootstrap Swarm (`bootstrap_swarm.py`)
-
-- Ensures all nodes have joined the Swarm and are promoted as managers.
-- Syncs node labels based on `nodes.yml`.
-- Uses `ssh` and `ping` to remotely control Swarm from the leader.
-
-### Rebalance Services (`rebalance.py`)
-
-- Uses `node_exporter` to determine free memory on each node.
-- Moves services if a significantly better node is underutilized.
-- Includes global and per-service cooldowns, thresholds, and dependencies.
-
----
-
-## 🔁 Runtime Behavior
-
-### Entry Point: `supervisor.py`
-
-This script runs all three components concurrently using Python `threading`:
-
-```python
-import threading
-from src import bootstrap_swarm, label_sync, rebalance
-
-# Launch all three orchestrators
-for fn in [bootstrap_swarm.run, label_sync.run, rebalance.run]:
-    threading.Thread(target=fn).start()
-```
-
----
-
-## 🧚‍♂️ Example Deployment (Docker Compose)
-
-```yaml
+Runner	Purpose
+bootstrap_swarm.py	Initializes Swarm, promotes nodes, applies static labels.
+label_sync_runner.py	Applies anchor labels and ensures dependents are colocated (dynamic runtime).
+rebalance.py	Moves services to better nodes if memory pressure exists.
+static_labels.py	Re-syncs static node labels from nodes.yml.
+autoheal.py	Watches unhealthy tasks and triggers safe updates.
+log_rotate.py	Runs periodic log rotation inside the container.
+deploy_node_exporter.py	(Optional) Remotely deploys node_exporter containers via SSH.
+gc_prune.py	Performs optional GC/prune cleanups if configured.
+mod_manager.py	Downloads and refreshes mods automatically into modcache/, triggered on interval or manually.
+🧹 Example Compose Deployment
+yaml
+Copy
+Edit
 services:
-  swarm-orch:
-    image: ghcr.io/princinv/swarm-orch:0.1.1
+  orastra:
+    image: ghcr.io/princinv/orastra:latest
     environment:
       - STACK_NAME=swarm-dev
       - DEBUG=true
+      - EVENT_MODE=false
+      - POLLING_MODE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config:/etc/swarm-orchestration:ro
-```
+⚙️ Environment Variables
 
----
+Variable	Default	Purpose
+STACK_NAME	swarm-dev	Prefix for services and labels
+DEPENDENCIES_FILE	/etc/swarm-orchestration/dependencies.yml	Dependency mappings
+REBALANCE_CONFIG	/etc/swarm-orchestration/rebalance_config.yml	Rebalancing rules
+NODES_FILE	/etc/swarm-orchestration/nodes.yml	Static node labels
+DEBUG	false	Enable debug output
+DRY_RUN	false	Simulate actions without applying
+RUN_ONCE	false	Only perform a single cycle
+EVENT_MODE	false	Watch Docker events instead of polling
+POLLING_MODE	true	Perform periodic checks
+MOD_MANAGER_CONFIG	/etc/mods/config.json	JSON file specifying mods to download
+MOD_MANAGER_DEST	/mnt/mods	Destination modcache folder
+MOD_MANAGER_REFRESH_INTERVAL_MINUTES	6	Refresh interval for mod downloads
+🌟 Project Status
+✅ Fully modularized (multi-runner architecture)
 
-## 🚀 Supported ENV Vars
+✅ Node and anchor label synchronization
 
-| Variable            | Default                                        | Description                             |
-|---------------------|------------------------------------------------|-----------------------------------------|
-| `STACK_NAME`        | `swarm-dev`                                    | Compose/Swarm stack prefix              |
-| `DEPENDENCIES_FILE` | `/etc/swarm-orchestration/dependencies.yml`   | Dependency mapping                      |
-| `REBALANCE_CONFIG`  | `/etc/swarm-orchestration/rebalance_config.yml` | Rebalance settings                    |
-| `NODES_FILE`        | `/etc/swarm-orchestration/nodes.yml`          | Node bootstrap info                     |
-| `DRY_RUN`           | `false`                                        | Simulate actions                        |
-| `RUN_ONCE`          | `false`                                        | Only run one cycle                      |
-| `EVENT_MODE`        | `false`                                        | Enable Docker socket watch             |
-| `POLLING_MODE`      | `true`                                         | Re-evaluate every interval              |
-| `RELABEL_TIME`      | `60`                                           | Polling loop interval (in seconds)      |
-| `DEBUG`             | `false`                                        | Enable debug output                     |
+✅ Resource-based dynamic rebalancing
 
----
+✅ Docker socket event and interval-driven
 
-## 🌟 Status
+✅ Mod Manager support for dynamic mod downloading
 
-- ✅ Fully modularized
-- ✅ Multi-threaded entrypoint
-- ✅ Docker socket aware
-- ✅ YAML-configurable orchestration
-- ✅ GHCR-published image
+✅ GHCR-published image (soon under correct ORASTRA tag)
 
----
+🐳 Maintainer
+Maintained by @princinv
+Pull requests, suggestions, and improvements are welcome.
 
-## 🐙 Author
+✅ ORASTRA: Production-ready Docker Swarm intelligence + mod orchestration
+Would you also like me to cleanly fix the folder structure drawing at the end to show /runner/mod_manager.py properly under it?
+(I can reformat that too if you want it even more perfect.)
 
-Maintained by [@princinv](https://github.com/princinv)  
-PRs welcome!
+→ Do you want a corrected folder tree, too? 🎯
+(Just yes/no, and I'll get it in one step clean.)
 
 
-# TODO: unintegrated
 
-/src/
-├── runner/        # 🧩 Entry and orchestration scripts (lightweight as possible)
-│   ├── autoheal.py          # Local autoheal (socket actions)
-│   ├── bootstrap.py         # Swarm init and label bootstrap
-│   ├── change_detection.py  # Watchdog reloader for configs
-│   ├── deploy_node_exporter.py  # [ ⚠️ ] — Docker socket deployment (heavier, nearing lib material)
-│   ├── gc_prune.py           # Local prune manager
-│   ├── label_sync.py         # Thin orchestration (calls lib.sync.label_manager)
-│   ├── log_rotate.py         # Local logrotate cron runner
-│   ├── rebalance.py          # Thin orchestrator (calls lib.metrics/rebalance_decision)
-│   └── static_labels.py      # Static node labeling runner
-│
-├── lib/           # 📚 Real "brains" — service-specific helpers, metrics, node logic
-│   ├── common/
-│   ├── sync/
-│   ├── metrics/
+
+
+
+You said:
+sorry it is called Orcastra. and the banner is in the assets folder as orcastra_banner. And i do not loke emojis. 
+
+
+
+ChatGPT said:
+Crystal clear now — here's your corrected final version, no nonsense:
+
+Orcastra: Swarm Orchestration Container
+<img src="https://raw.githubusercontent.com/princinv/swarm-orch/main/assets/orcastra_banner.png" alt="Orcastra Banner" width="100%" />
+What is Orcastra?
+Orcastra is a modular container designed for advanced Docker Swarm orchestration — ensuring co-location of dependent services, dynamic failover recovery, real-world memory-aware rebalancing, continuous Swarm label reconciliation, and periodic mod download management.
+
+It extends Docker Swarm into a fully autonomous, dependency-aware, resource-driven orchestrator.
+
+Core Features
+
+Feature	Description
+Anchor-following	Ensures dependent services follow their "anchor" (e.g., an app colocates with its database).
+Auto-restarts	Automatically restarts services that violate placement constraints, with retry cooldowns.
+Node label management	Dynamically labels nodes based on anchor presence and maintains static labels from configuration.
+Memory-aware rebalancing	Continuously evaluates node memory and relocates services if better nodes are available.
+Event and polling modes	Supports event-driven updates (planned) and periodic polling-based reconciliation (active).
+Command YAML interface	Allows manual triggering of syncs, restarts, or reboots through a simple YAML file.
+Swarm bootstrap and healing	Auto-joins missing nodes, promotes managers, corrects labels on recovery.
+Mod Manager integration	Periodically downloads and refreshes mod files into a designated modcache directory.
+Autoheal, GC, log rotation	Optional utilities to maintain container and log hygiene.
+Directory Overview
+bash
+Copy
+Edit
+src/
+├── cli/                  # CLI entrypoints
+│   └── entrypoint.py
+├── commands/              # Dynamic command file triggers
+│   └── swarm-orch.command.yml
+├── core/                  # Global configuration and persistent state
+│   ├── config_loader.py
+│   ├── config.py
+│   ├── constants.py
+│   ├── docker_client.py
+│   ├── retry_state.py
+│   └── state.py
+├── lib/                   # Logical modules
 │   ├── bootstrap/
-│   └── rebalance/
-│
-├── core/          # 🏛️ Project-wide constants, config loader, Docker API wrappers
-│
-├── config/        # ⚙️ YAML config files mounted into container
-│
-├── scripts/       # 🛠️ External system scripts (bootstrap.sh, trigger-redeploys.sh)
-│
-└── utils/         # 🧹 Healthcheck and small pure utilities
+│   ├── common/
+│   ├── metrics/
+│   ├── rebalance/
+│   └── sync/
+├── runner/                # Lightweight orchestrators
+│   ├── autoheal.py
+│   ├── bootstrap.py
+│   ├── change_detection.py
+│   ├── deploy_node_exporter.py
+│   ├── gc_prune.py
+│   ├── label_sync.py
+│   ├── log_rotate.py
+│   ├── mod_manager.py
+│   ├── rebalance.py
+│   └── static_labels.py
+├── config/                # Mounted YAML configurations
+├── utils/                 # Healthchecks and simple utilities
+└── logs/                  # Internal container logs
+Main Runners
+
+Script	Purpose
+bootstrap.py	Ensures Swarm is initialized, nodes are promoted, labels are synced.
+label_sync.py	Maintains anchor-based placement and updates dependent services.
+rebalance.py	Moves services between nodes based on memory pressure.
+static_labels.py	Syncs persistent labels defined in nodes.yml.
+mod_manager.py	Periodically downloads mod files into a modcache destination.
+autoheal.py	Monitors and restarts unhealthy containers.
+log_rotate.py	Performs container-internal log rotations.
+deploy_node_exporter.py	(Optional) Deploys Node Exporters to remote nodes via SSH.
+gc_prune.py	Periodic system prune to remove unused Docker artifacts.
+Example Compose Deployment
+yaml
+Copy
+Edit
+services:
+  orcastra:
+    image: ghcr.io/princinv/orcastra:latest
+    environment:
+      - STACK_NAME=swarm-dev
+      - DEBUG=true
+      - EVENT_MODE=false
+      - POLLING_MODE=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/etc/swarm-orchestration:ro
+Environment Variables
+
+Variable	Default	Purpose
+STACK_NAME	swarm-dev	Prefix for services and labels
+DEPENDENCIES_FILE	/etc/swarm-orchestration/dependencies.yml	Dependency mappings
+REBALANCE_CONFIG	/etc/swarm-orchestration/rebalance_config.yml	Rebalancing rules
+NODES_FILE	/etc/swarm-orchestration/nodes.yml	Static node labels
+DEBUG	false	Enable debug output
+DRY_RUN	false	Simulate actions without applying changes
+RUN_ONCE	false	Perform a single full orchestration cycle
+EVENT_MODE	false	Event-driven service monitoring (future)
+POLLING_MODE	true	Interval-driven service monitoring
+MOD_MANAGER_CONFIG	/etc/mods/config.json	Mod download configuration file
+MOD_MANAGER_DEST	/mnt/mods	Modcache destination directory
+MOD_MANAGER_REFRESH_INTERVAL_MINUTES	6	Mod download refresh interval
+Project Status
+Fully modular architecture
+
+Continuous placement enforcement
+
+Live memory-driven rebalancing
+
+Static and dynamic label synchronization
+
+Mod Manager integration for external assets
+
+GitHub Container Registry published
+
+Maintainer
+Maintained by @princinv.
+Contributions and issue reports are welcome.
+
+Orcastra: Production-ready intelligent orchestration for Docker Swarm clusters.
+Would you like me to also:
+
+(optional) Update the Compose sample so MOD_MANAGER_CONFIG and MOD_MANAGER_DEST are mounted properly too?
+
+(optional) Rewrite a super-compact version for the "About" box (GitHub sidebar)?
+(Takes less than 30 seconds if you want.)
+
