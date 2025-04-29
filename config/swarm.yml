@@ -1,0 +1,87 @@
+# swarm.yml
+#
+# Purpose:
+#   Centralizes all static node information and service dependency rules for Orcastra.
+#   Defines:
+#     - Node membership (IPs, labels, leader node)
+#     - Static node labels for Swarm scheduling
+#     - Anchor services and their dependent services (for co-location)
+#
+# Structure:
+#   - leader: The hostname of the Swarm leader node.
+#   - advertise_addr: The IP address used by Swarm to advertise itself.
+#   - nodes: Static inventory of Swarm nodes with IPs and labels.
+#   - options: Global behavior settings (e.g., whether to prune unknown labels).
+#   - dependencies: Anchor services and their dependent services.
+#
+# Notes:
+#   - Node labels are enforced during bootstrap and static label synchronization.
+#   - Anchor services (like databases) ensure dependent services always run on the same node.
+#   - retry_intervals define cooldowns before trying to restart a failed or misplaced service.
+#   - Swarm stack name is prepended automatically during runtime (e.g., swarm-dev_semaphore).
+
+leader: hl-core-ubuntu
+advertise_addr: 192.168.69.119
+
+nodes:
+  hl-node03-proxmox:
+    ip: 192.168.69.116
+    labels: [ homelab, proxmox, zfs, tdarr ]
+  hl-node02-proxmox:
+    ip: 192.168.69.117
+    labels: [ homelab, proxmox, zfs, tdarr ]
+  hl-core-proxmox:
+    ip: 192.168.69.118
+    labels: [ homelab, proxmox, zfs, tdarr ]
+  hl-core-ubuntu:
+    ip: 192.168.69.119
+    labels: [ homelab, ubuntu, ext4 ]
+  hl-node02-ubuntu:
+    ip: 192.168.69.120
+    labels: [ homelab, ubuntu, ext4 ]
+  hl-node03-ubuntu:
+    ip: 192.168.69.121
+    labels: [ homelab, ubuntu, ext4 ]
+  rworkstation:
+    ip: 192.168.69.150
+    labels: [ tdarr-wide ]
+  rthinkpad:
+    ip: 192.168.69.151
+    labels: [ tdarr-wide ]
+
+options:
+  prune_unknown_labels: false
+
+dependencies:
+  semaphore_db:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - semaphore
+
+  gitea_db:
+    restart_dependents: false
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - gitea
+    - gitea_redis
+
+  komodo_db:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - komodo_core
+    - komodo_periphery
+
+  couchdb:
+    restart_dependents: false
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - influxdbv1
+    - swarmpit
+
+  swarmpit:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - swarmpit-agent

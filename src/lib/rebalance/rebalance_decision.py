@@ -1,3 +1,28 @@
+#!/usr/bin/env python3
+"""
+rebalance_decision.py
+- Encapsulates the decision logic for memory-aware Docker Swarm service rebalancing.
+- Services are moved automatically to better nodes if sustained memory pressure is detected.
+- Supports preferred node labels and dynamic buffer-based rebalance evaluation.
+
+Functions:
+  - should_rebalance(): Determines if a service should migrate to another node.
+  - run_rebalance_loop(): Continuously monitors metrics and executes rebalance actions.
+
+Config:
+  - Reads configuration from REBALANCE_CONFIG_PATH (rebalance_config.yml).
+  - Dependencies list can be specified inside rebalance_config.yml via 'dependencies_file'.
+  - Memory metrics are collected via Node Exporter endpoints.
+
+Usage:
+  - Can be triggered via main Orcastra supervisor.
+  - Designed to survive Swarm leader changes and resilient against metric scraping failures.
+
+Notes:
+  - Rebalance is triggered only if sustained imbalance exceeds configured thresholds.
+  - Services can opt-out of rebalancing via label "orchestration.rebalance=false".
+"""
+
 from datetime import datetime, timedelta
 import asyncio
 import logging

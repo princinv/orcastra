@@ -13,7 +13,6 @@ import threading
 import logging
 from datetime import datetime
 
-from core.config_loader import load_yaml
 from core.docker_client import client
 from core.retry_state import retry_state, should_retry, record_retry, clear_retry
 from lib.common.service_helpers import force_update_service
@@ -37,7 +36,6 @@ FAILURE_STATES = {"failed", "rejected", "remove", "orphaned"}
 TERMINAL_STATES = SUCCESS_STATES | FAILURE_STATES | {"shutdown"}
 
 # --- Config via Environment Variables ---
-DEPENDENCIES_FILE = os.getenv("DEPENDENCIES_FILE", "/etc/swarm-orchestration/dependencies.yml")
 STACK_NAME = os.getenv("STACK_NAME", "swarm-dev")
 RELABEL_TIME = int(os.getenv("RELABEL_TIME", "60"))
 POLLING_MODE = os.getenv("POLLING_MODE", "true").lower() == "true"
@@ -143,12 +141,11 @@ def update_dependents(client, dependencies):
     logging.info("[label_sync] Dependent services updated respecting anchor-specific cooldown rules.")
 
 # --- Entrypoint Loop ---
-def main_loop():
+def main_loop(dependencies):
     global anchor_updates_total, anchor_sync_errors_total, anchor_sync_last_duration_seconds
 
     start_time = time.time()
     try:
-        dependencies = load_yaml(DEPENDENCIES_FILE)
         if not dependencies:
             logging.warning("[label_sync] No dependencies found.")
             return
@@ -168,16 +165,15 @@ def main_loop():
 # --- Signal Support for SIGHUP Rerun ---
 def signal_handler(signum, frame):
     logging.info("[label_sync] SIGHUP received — forcing label sync now")
-    main_loop()
 
 # --- Entrypoint Dispatcher ---
-def run():
+def run(dependencies):
     if threading.current_thread() is threading.main_thread():
-        signal.signal(signal.SIGHUP, signal_handler)
+        signal.signal(signal.SIGHUP, lambda s, f: main_loop(dependencies))
 
     if POLLING_MODE:
         while should_run:
-            main_loop()
+            main_loop(dependencies)
             time.sleep(RELABEL_TIME)
     elif EVENT_MODE:
         logging.info("[label_sync] Event-driven mode is not implemented yet.")

@@ -14,7 +14,7 @@ import logging
 
 from core.config_loader import load_yaml
 
-CONFIG_PATH = "/etc/swarm-orchestration/node_exporter_deploy.yml"
+CONFIG_PATH = "/src/system_services/node_exporter.yml"
 
 
 def build_service_command(cfg):

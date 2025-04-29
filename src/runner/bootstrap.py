@@ -13,11 +13,10 @@ from core.config_loader import load_yaml, preview_yaml
 from lib.bootstrap.bootstrap_tasks import check_swarm, get_join_token, join_node, get_node_map
 from lib.bootstrap.bootstrap_labels import sync_labels
 from lib.common.ssh_helpers import is_online, ssh
-from runner import static_labels  # <-- ADDED STATIC LABELS MODULE
+from runner import static_labels  # Static label sync module
 
 # --- Runtime Environment Variables ---
-COMMAND_FILE = os.getenv("COMMAND_FILE", "/tmp/swarm-orchestration.command.yml")
-NODES_FILE = os.getenv("NODES_FILE", "/etc/swarm-orchestration/nodes.yml")
+SWARM_FILE = os.getenv("SWARM_FILE", "/etc/swarm-orchestration/swarm.yml")
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 RUN_ONCE = os.getenv("RUN_ONCE", "false").lower() == "true"
 LOOP_INTERVAL = int(os.getenv("LOOP_INTERVAL", "300"))
@@ -25,7 +24,7 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 should_run = True
 
 # --- Startup Preview ---
-preview_yaml(NODES_FILE, name="nodes.yml")
+preview_yaml(SWARM_FILE, name="swarm.yml")
 
 def bootstrap_swarm():
     """
@@ -36,7 +35,7 @@ def bootstrap_swarm():
     - Ensures labels are up to date
     - Ensures static labels are applied
     """
-    config = load_yaml(NODES_FILE)
+    config = load_yaml(SWARM_FILE)
     leader = config.get("leader")
     advertise = config.get("advertise_addr")
     nodes = config.get("nodes", {})
@@ -71,7 +70,7 @@ def bootstrap_swarm():
 
     sync_labels(advertise, nodes, node_map, prune=prune, dry_run=DRY_RUN, debug=DEBUG)
 
-    # --- Static label sync (new) ---
+    # Static label sync
     static_labels.run()
 
     return True

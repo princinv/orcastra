@@ -1,16 +1,32 @@
-comonitor_interval_seconds: 30
+# rebalance_config.yml
+#
+# Purpose:
+#   Controls automatic **memory-aware service rebalancing** in Orcastra.
+#   Services are moved to less-loaded nodes when sustained memory pressure is detected.
+#
+# Structure:
+#   - comonitor_interval_seconds: How often to re-evaluate rebalancing decisions.
+#   - default: Global rebalance settings (cooldown, sustained high memory, memory thresholds).
+#   - node_exporter_nodes: Physical node mapping to Node Exporter endpoints for true memory metrics.
+#   - node_map: Maps VM node names to physical host names.
+#   - services: Optional per-service overrides for cooldowns and memory sensitivity.
+#
+# Notes:
+#   - Node Exporter must be installed and running on all Proxmox physical hosts.
+#   - Docker nodes (VMs) report misleading memory under ballooning; this corrects it.
+#   - Services listed under "services" can have stricter or looser rebalance triggers.
+
+comonitor_interval_seconds: 30  # Frequency (in seconds) to check memory and service balance
 
 default:
-  cooldown_minutes: 15
-  sustained_high_minutes: 10
-  memory_difference_gb: 2
+  cooldown_minutes: 15           # Cooldown after a service is moved before it can move again
+  sustained_high_minutes: 10     # Memory pressure must persist this long before moving
+  memory_difference_gb: 2        # Minimum memory gap (in GB) between nodes to consider rebalancing
 
-# Node exporter runs on Proxmox host to report memory for the corresponding VM
 node_exporter_nodes:
   hl-core-proxmox:
     exporter_url: http://192.168.69.118:9100/metrics
 
-# Map Docker VM nodes → physical Proxmox host node_exporter
 node_map:
   hl-core-ubuntu: hl-core-proxmox
   hl-node02-ubuntu: hl-node02-proxmox
@@ -18,8 +34,8 @@ node_map:
 
 services:
   semaphore_db:
-    cooldown_minutes: 30
-    memory_difference_gb: 3
+    cooldown_minutes: 30          # Overrides: Semaphore DB is more sensitive, needs longer cooldown
+    memory_difference_gb: 3        # Needs at least 3GB better node to rebalance
   gitea_db:
     cooldown_minutes: 30
     memory_difference_gb: 3
