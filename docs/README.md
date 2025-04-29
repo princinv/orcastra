@@ -1,6 +1,6 @@
 # Orcastra: Swarm Orchestration Container
 
-<img src="https://raw.githubusercontent.com/princinv/assets/main/orcastra_banner.png" alt="Orcastra Banner" width="100%" />
+<img src="https://raw.githubusercontent.com/princinv/assets/main/orcastra_banner_v2.png" alt="Orcastra Banner" width="100%" />
 
 ---
 
