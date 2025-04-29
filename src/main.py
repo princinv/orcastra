@@ -9,6 +9,7 @@ main.py
     - Garbage Collection loop with Prometheus metrics
     - Autoheal loop for unhealthy containers
     - Node Exporter deployment at startup
+    - Mod Manager loop for automatic mod downloads
 """
 
 import asyncio
@@ -30,6 +31,7 @@ from runner.deploy_node_exporter import deploy as deploy_node_exporter
 from runner import gc_prune
 from runner import autoheal
 from runner import log_rotate
+from lib.mods import mod_manager  # <-- NEW
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -46,9 +48,13 @@ async def health():
 
 @api.post("/sync")
 async def sync_now():
-    from lib.sync import label_manager
-    await label_manager.main_loop()  # runs 1 pass only
+    await label_manager.main_loop()
     return {"status": "triggered"}
+
+@api.post("/refresh_mods")
+async def manual_mod_refresh():
+    Thread(target=mod_manager.refresh_mods).start()
+    return {"status": "mod_refresh_triggered"}
 
 @api.get("/metrics")
 async def metrics():
@@ -98,6 +104,16 @@ anchor_sync_errors_total {label_manager.anchor_sync_errors_total}
 # TYPE anchor_sync_last_duration_seconds gauge
 anchor_sync_last_duration_seconds {label_manager.anchor_sync_last_duration_seconds}
 swarm_orch_leader {1 if is_leader_node() else 0}
+# Mod Manager Metrics
+# HELP mod_downloads_total Total successful mod downloads
+# TYPE mod_downloads_total counter
+mod_downloads_total {mod_manager.mod_downloads_total}
+# HELP mod_download_errors_total Total failed mod downloads
+# TYPE mod_download_errors_total counter
+mod_download_errors_total {mod_manager.mod_download_errors_total}
+# HELP mod_refresh_last_duration_seconds Duration of last mod refresh cycle
+# TYPE mod_refresh_last_duration_seconds gauge
+mod_refresh_last_duration_seconds {mod_manager.mod_refresh_last_duration_seconds}
 """,
         media_type="text/plain"
     )
@@ -108,6 +124,7 @@ def start_api():
 # --- Start background threads ---
 Thread(target=start_api, daemon=True).start()
 Thread(target=start_file_watcher, daemon=True).start()
+Thread(target=mod_manager.scheduled_mod_refresh, daemon=True).start()  # <-- NEW background loop
 
 # --- Main Async Orchestration ---
 async def main():

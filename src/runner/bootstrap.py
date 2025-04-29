@@ -3,7 +3,7 @@
 bootstrap.py
 - Ensures Docker Swarm is initialized and that all nodes have the correct labels.
 - Can be run via main supervisor or manually via CLI.
-- Executes node promotion, label syncing, and initial join flow.
+- Executes node promotion, label syncing, static label syncing, and initial join flow.
 """
 
 import os
@@ -13,6 +13,7 @@ from core.config_loader import load_yaml, preview_yaml
 from lib.bootstrap.bootstrap_tasks import check_swarm, get_join_token, join_node, get_node_map
 from lib.bootstrap.bootstrap_labels import sync_labels
 from lib.common.ssh_helpers import is_online, ssh
+from runner import static_labels  # <-- ADDED STATIC LABELS MODULE
 
 # --- Runtime Environment Variables ---
 COMMAND_FILE = os.getenv("COMMAND_FILE", "/tmp/swarm-orchestration.command.yml")
@@ -33,6 +34,7 @@ def bootstrap_swarm():
     - Joins any unjoined nodes
     - Promotes them to managers
     - Ensures labels are up to date
+    - Ensures static labels are applied
     """
     config = load_yaml(NODES_FILE)
     leader = config.get("leader")
@@ -68,6 +70,10 @@ def bootstrap_swarm():
             ssh(advertise, f"docker node promote {node_map[name]}", DEBUG)
 
     sync_labels(advertise, nodes, node_map, prune=prune, dry_run=DRY_RUN, debug=DEBUG)
+
+    # --- Static label sync (new) ---
+    static_labels.run()
+
     return True
 
 def sighup_handler(signum, frame):
