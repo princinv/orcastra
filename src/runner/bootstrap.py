@@ -9,6 +9,8 @@ bootstrap.py
 import os
 import signal
 import asyncio
+from loguru import logger
+
 from core.config_loader import load_yaml, preview_yaml
 from lib.bootstrap.bootstrap_tasks import check_swarm, get_join_token, join_node, get_node_map
 from lib.bootstrap.bootstrap_labels import sync_labels
@@ -27,14 +29,7 @@ should_run = True
 preview_yaml(SWARM_FILE, name="swarm.yml")
 
 def bootstrap_swarm():
-    """
-    Main bootstrap routine:
-    - Checks if Swarm is active
-    - Joins any unjoined nodes
-    - Promotes them to managers
-    - Ensures labels are up to date
-    - Ensures static labels are applied
-    """
+    logger.info("[bootstrap] Starting bootstrap sequence...")
     config = load_yaml(SWARM_FILE)
     leader = config.get("leader")
     advertise = config.get("advertise_addr")
@@ -42,48 +37,64 @@ def bootstrap_swarm():
     prune = config.get("options", {}).get("prune_unknown_labels", False)
 
     if not is_online(advertise):
-        print(f"[bootstrap] Leader {leader} offline at {advertise}, skipping.")
+        logger.warning(f"[bootstrap] Leader {leader} offline at {advertise}, skipping.")
         return False
 
     if check_swarm(advertise, DEBUG):
-        print("[bootstrap] Swarm initialized.")
+        logger.info("[bootstrap] Swarm was not active — initialized.")
     else:
-        print("[bootstrap] Swarm already active.")
+        logger.info("[bootstrap] Swarm already active on leader.")
 
     token = get_join_token(advertise, DEBUG)
     if not token:
-        print("[bootstrap] Failed to retrieve join token.")
+        logger.error("[bootstrap] Failed to retrieve join token.")
         return False
 
     for name, meta in nodes.items():
         ip = meta["ip"]
-        if name == leader or not is_online(ip):
+        if name == leader:
+            logger.debug(f"[bootstrap] Skipping leader {name}")
+            continue
+        if not is_online(ip):
+            logger.warning(f"[bootstrap] Node {name} at {ip} is offline, skipping.")
             continue
         if ssh(ip, "docker info | grep 'Swarm: active'", DEBUG).returncode != 0:
             join_node(ip, token, advertise, DEBUG)
-            print(f"[bootstrap] {name} joined.")
+            logger.info(f"[bootstrap] Node {name} joined to Swarm.")
+        else:
+            logger.debug(f"[bootstrap] Node {name} already in Swarm.")
 
     node_map = get_node_map(advertise, DEBUG)
     for name in nodes:
         if name in node_map:
+            logger.info(f"[bootstrap] Promoting node {name} to manager.")
             ssh(advertise, f"docker node promote {node_map[name]}", DEBUG)
+        else:
+            logger.warning(f"[bootstrap] Skipping promotion — {name} not found in node_map.")
 
+    logger.info("[bootstrap] Applying bootstrap-time dynamic labels...")
     sync_labels(advertise, nodes, node_map, prune=prune, dry_run=DRY_RUN, debug=DEBUG)
 
-    # Static label sync
-    static_labels.run()
+    logger.info("[bootstrap] Running static label sync via SDK...")
+    try:
+        static_labels.run()
+        logger.info("[bootstrap] Static label sync completed successfully.")
+    except Exception as e:
+        logger.exception(f"[bootstrap] Static label sync failed: {e}")
 
     return True
 
 def sighup_handler(signum, frame):
-    print("📣 SIGHUP received — re-running bootstrap...")
+    logger.info("📣 SIGHUP received — re-running bootstrap...")
     bootstrap_swarm()
 
 async def run():
     signal.signal(signal.SIGHUP, sighup_handler)
     if RUN_ONCE:
+        logger.info("[bootstrap] RUN_ONCE=true — running bootstrap once.")
         bootstrap_swarm()
     else:
+        logger.info(f"[bootstrap] Starting loop every {LOOP_INTERVAL} seconds...")
         while should_run:
             bootstrap_swarm()
             await asyncio.sleep(LOOP_INTERVAL)

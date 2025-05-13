@@ -11,6 +11,7 @@ main.py
     - Node Exporter deployment at startup
     - Mod Manager loop for automatic mod downloads
 """
+
 import asyncio
 import os
 import sys
@@ -31,9 +32,9 @@ from runner.deploy_node_exporter import deploy as deploy_node_exporter
 from runner import gc_prune
 from runner import autoheal
 from runner import log_rotate
-from lib.mods import mod_manager  # <-- NEW
+from lib.mods import mod_manager
 
-from loguru import logger  # <-- NEW
+from loguru import logger
 
 # OPTIONAL: Only if you have a Sentry DSN
 import sentry_sdk
@@ -42,7 +43,7 @@ if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         traces_sample_rate=1.0,
-        send_default_pii=True  # optional: includes user info if available
+        send_default_pii=True
     )
 
 # --- Logging Setup ---
@@ -139,7 +140,7 @@ def start_api():
 # --- Start background threads ---
 Thread(target=start_api, daemon=True).start()
 Thread(target=start_file_watcher, daemon=True).start()
-Thread(target=mod_manager.scheduled_mod_refresh, daemon=True).start()  # <-- NEW background loop
+Thread(target=mod_manager.scheduled_mod_refresh, daemon=True).start()
 
 # --- Main Async Orchestration ---
 async def main():
@@ -169,10 +170,15 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        # Static labels one-time run at startup
-        run_static_label_sync()
-        # Node Exporter one-time deploy at startup
+        logger.info("[startup] Running static node label sync...")
+        try:
+            run_static_label_sync()
+        except Exception as e:
+            logger.exception(f"[startup] Static label sync failed: {e}")
+
+        logger.info("[startup] Deploying node_exporter (if enabled)...")
         deploy_node_exporter()
+
         asyncio.run(main())
     except KeyboardInterrupt:
         print("🛑 KeyboardInterrupt received. Exiting.")

@@ -20,6 +20,17 @@
 #   - retry_intervals define cooldowns before trying to restart a failed or misplaced service.
 #   - Swarm stack name is prepended automatically during runtime (e.g., swarm-dev_semaphore).
 
+# | Constraint Key         | Description                                                                 |
+# |------------------------|-----------------------------------------------------------------------------|
+# | `node.hostname`        | Matches the Docker hostname (e.g., `node.hostname == hl-core-ubuntu`)       |
+# | `node.id`              | Matches the internal Swarm node ID                                          |
+# | `node.role`            | `manager` or `worker`                                                       |
+# | `node.platform.os`     | Operating system (usually `linux`)                                          |
+# | `node.platform.arch`   | Architecture (e.g., `amd64`, `arm64`)                                       |
+# | `node.platform.variant`| Variant (e.g., `v7`, `v8` on ARM systems) — usually empty on x86            |
+# | `engine.labels.*`      | Matches Docker Engine labels (like `engine.labels.storage=ssd`)             |
+# | `engine.version`       | Docker Engine version (e.g., `engine.version == 24.0.6`)                    |
+
 leader: hl-core-ubuntu
 advertise_addr: 192.168.69.119
 
@@ -29,19 +40,19 @@ nodes:
     labels: [ homelab, proxmox, zfs, tdarr ]
   hl-node02-proxmox:
     ip: 192.168.69.117
-    labels: [ homelab, proxmox, zfs, tdarr ]
+    labels: [ testing, homelab, proxmox, zfs, tdarr ]
   hl-core-proxmox:
     ip: 192.168.69.118
     labels: [ homelab, proxmox, zfs, tdarr ]
   hl-core-ubuntu:
     ip: 192.168.69.119
-    labels: [ homelab, ubuntu, ext4 ]
+    labels: [ testing, homelab, ubuntu, ext4 ]
   hl-node02-ubuntu:
     ip: 192.168.69.120
     labels: [ homelab, ubuntu, ext4 ]
   hl-node03-ubuntu:
     ip: 192.168.69.121
-    labels: [ homelab, ubuntu, ext4 ]
+    labels: [ testing, homelab, ubuntu, ext4 ]
   rworkstation:
     ip: 192.168.69.150
     labels: [ tdarr-wide ]
@@ -80,8 +91,25 @@ dependencies:
     - influxdbv1
     - swarmpit
 
-  swarmpit:
+  guacamole_db:
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
-    - swarmpit-agent
+    - guacd
+    - guacamole
+
+  swag:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - crowdsec
+    - crowdsec-cf-bouncer
+    - crowdsec_db
+
+  autentik_db:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - authentik-redis
+    - authentik
+    - crowdsec_db

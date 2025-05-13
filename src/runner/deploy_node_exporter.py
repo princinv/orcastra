@@ -15,7 +15,7 @@ from loguru import logger
 from core.config_loader import load_yaml
 from tenacity import retry, stop_after_attempt, wait_fixed
 
-CONFIG_PATH = "/etc/swarm-orchestration/node_exporter_deploy.yml"  # <-- FIXED
+CONFIG_PATH = "/etc/swarm-orchestration/deploy_node_exporter.yml"  # <-- FIXED
 
 def build_service_command(cfg):
     cmd = ["docker", "service", "create"]
