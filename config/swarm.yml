@@ -63,7 +63,88 @@ nodes:
 options:
   prune_unknown_labels: false
 
+# co-location dependencies
 dependencies:
+
+  ## SWARM-AI
+
+  ollama:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - anythingllm
+
+  ## SWARM-CLOUD
+
+  bitwarden_db:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - db
+
+  nextcloud_db:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - nextcloud
+    - nextcloud_redis
+    - documentserver
+
+  linkwarden_db:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - linkwarden
+    - linkwarden_meili
+
+  paperless_db:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - paperless-ngx
+    - paperless_redis
+
+  ## SWARM-CONTENT
+
+  recipes_db:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - recipes
+
+  nitter:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - nitter_redis
+
+  proxitok:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - proxitok_redis
+    - proxitok_chromedriver
+
+  libremdb:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - libremdb_redis
+
+  quetre:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - quetre_redis
+
+  joplin_db:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - joplin
+
+  ## SWARM-DEV
+
   semaphore_db:
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
@@ -98,6 +179,17 @@ dependencies:
     - guacd
     - guacamole
 
+  ## SWARM-LIBRARY
+
+  tubearchivest:
+    restart_dependents: true
+    retry_intervals: [ 2, 10, 60, 300, 900 ]
+    services:
+    - archivist_redis
+    - archivist_es
+
+  ## SWARM-PROXY
+
   swag:
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
@@ -105,11 +197,11 @@ dependencies:
     - crowdsec
     - crowdsec-cf-bouncer
     - crowdsec_db
+    - authentik_db
 
-  autentik_db:
+  authentik_db:
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
     - authentik-redis
     - authentik
-    - crowdsec_db
