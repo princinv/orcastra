@@ -67,7 +67,9 @@ def update_dependents(client, dependencies):
 
     for anchor_label, config in dependencies.items():
         dependents = config.get("services") if isinstance(config, dict) else config
-        anchor_service = f"{STACK_NAME}_{anchor_label}"
+        stack = config.get("stack", STACK_NAME) if isinstance(config, dict) else STACK_NAME
+
+        anchor_service = f"{stack}_{anchor_label}"
         retry_intervals = retry_intervals_for(anchor_label, dependencies)
 
         anchor_state, anchor_node = get_anchor_state_for_failover(anchor_service, debug=True)
@@ -86,10 +88,10 @@ def update_dependents(client, dependencies):
             else:
                 logger.info(f"[label_sync] Anchor {anchor_service} in cooldown. Skipping anchor restart.")
 
-            restart_dependents = config.get('restart_dependents', False)
+            restart_dependents = config.get("restart_dependents", False)
             if restart_dependents:
                 for dep in dependents:
-                    dep_service = f"{STACK_NAME}_{dep}"
+                    dep_service = f"{stack}_{dep}"
                     if should_retry(dep_service, retry_intervals):
                         logger.warning(f"[label_sync] Restarting dependent {dep_service} due to anchor failure per cooldown.")
                         record_retry(dep_service)
@@ -101,7 +103,7 @@ def update_dependents(client, dependencies):
 
         if anchor_state == "running":
             for dep in dependents:
-                dep_service = f"{STACK_NAME}_{dep}"
+                dep_service = f"{stack}_{dep}"
                 task_state, dep_node = get_task_state(dep_service, debug=True)
 
                 if not dep_node:
@@ -150,7 +152,10 @@ def main_loop(dependencies):
             return
 
         logger.info("[label_sync] Running label sync main loop")
-        label_anchors(list(dependencies.keys()), STACK_NAME, debug=True)
+        for anchor_label, config in dependencies.items():
+            stack = config.get("stack", STACK_NAME) if isinstance(config, dict) else STACK_NAME
+            label_anchors([anchor_label], stack, debug=True)
+
         anchor_updates_total += 1
         update_dependents(client, dependencies)
 

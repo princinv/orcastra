@@ -37,28 +37,28 @@ advertise_addr: 192.168.69.119
 nodes:
   hl-node03-proxmox:
     ip: 192.168.69.116
-    labels: [ homelab, proxmox, zfs, tdarr ]
+    labels: [ hl-node-03-proxmox, homelab, proxmox, zfs, tdarr ]
   hl-node02-proxmox:
     ip: 192.168.69.117
-    labels: [ testing, homelab, proxmox, zfs, tdarr ]
+    labels: [ hl-node02-proxmox, testing, homelab, proxmox, zfs, tdarr ]
   hl-core-proxmox:
     ip: 192.168.69.118
-    labels: [ homelab, proxmox, zfs, tdarr ]
+    labels: [ hl-core-proxmox, homelab, proxmox, zfs, tdarr ]
   hl-core-ubuntu:
     ip: 192.168.69.119
-    labels: [ testing, homelab, ubuntu, ext4 ]
+    labels: [ hl-core-ubuntu, testing, homelab, ubuntu, ext4 ]
   hl-node02-ubuntu:
     ip: 192.168.69.120
-    labels: [ homelab, ubuntu, ext4 ]
+    labels: [ hl-node02-ubuntu, homelab, ubuntu, ext4 ]
   hl-node03-ubuntu:
     ip: 192.168.69.121
-    labels: [ testing, homelab, ubuntu, ext4 ]
+    labels: [ hl-node03-ubuntu, testing, homelab, ubuntu, ext4 ]
   rworkstation:
     ip: 192.168.69.150
-    labels: [ tdarr-wide ]
+    labels: [ rworkstation, tdarr-wide ]
   rthinkpad:
     ip: 192.168.69.151
-    labels: [ tdarr-wide ]
+    labels: [ rthinkpad, tdarr-wide ]
 
 options:
   prune_unknown_labels: false
@@ -69,6 +69,7 @@ dependencies:
   ## SWARM-AI
 
   ollama:
+    stack: swarm-ai
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -77,12 +78,14 @@ dependencies:
   ## SWARM-CLOUD
 
   bitwarden_db:
+    stack: swarm-cloud
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
-    - db
+    - bitwarden
 
   nextcloud_db:
+    stack: swarm-cloud
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -91,6 +94,7 @@ dependencies:
     - documentserver
 
   linkwarden_db:
+    stack: swarm-cloud
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -98,6 +102,7 @@ dependencies:
     - linkwarden_meili
 
   paperless_db:
+    stack: swarm-cloud
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -107,18 +112,21 @@ dependencies:
   ## SWARM-CONTENT
 
   recipes_db:
+    stack: swarm-content
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
     - recipes
 
   nitter:
+    stack: swarm-content
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
     - nitter_redis
 
   proxitok:
+    stack: swarm-content
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -126,18 +134,21 @@ dependencies:
     - proxitok_chromedriver
 
   libremdb:
+    stack: swarm-content
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
     - libremdb_redis
 
   quetre:
+    stack: swarm-content
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
     - quetre_redis
 
   joplin_db:
+    stack: swarm-content
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -146,12 +157,14 @@ dependencies:
   ## SWARM-DEV
 
   semaphore_db:
+    stack: swarm-dev
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
     - semaphore
 
   gitea_db:
+    stack: swarm-dev
     restart_dependents: false
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -159,6 +172,7 @@ dependencies:
     - gitea_redis
 
   komodo_db:
+    stack: swarm-dev
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -166,6 +180,7 @@ dependencies:
     - komodo_periphery
 
   couchdb:
+    stack: swarm-dev
     restart_dependents: false
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -173,6 +188,7 @@ dependencies:
     - swarmpit
 
   guacamole_db:
+    stack: swarm-dev
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -182,6 +198,7 @@ dependencies:
   ## SWARM-LIBRARY
 
   tubearchivest:
+    stack: swarm-library
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
@@ -190,18 +207,19 @@ dependencies:
 
   ## SWARM-PROXY
 
-  swag:
-    restart_dependents: true
-    retry_intervals: [ 2, 10, 60, 300, 900 ]
-    services:
-    - crowdsec
-    - crowdsec-cf-bouncer
-    - crowdsec_db
-    - authentik_db
+  # crowdsec_db:
+  #   stack: swarm-proxy
+  #   restart_dependents: true
+  #   retry_intervals: [ 2, 10, 60, 300, 900 ]
+  #   services:
+  #   - crowdsec
+  #   - crowdsec-cf-bouncer
 
   authentik_db:
+    stack: swarm-proxy
     restart_dependents: true
     retry_intervals: [ 2, 10, 60, 300, 900 ]
     services:
-    - authentik-redis
-    - authentik
+    - authentik_redis
+    - authentik-server
+    - authentik-worker
